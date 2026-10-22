@@ -1771,7 +1771,9 @@ class Arena {
       html += `<p><b>Conséquence :</b> ${mate ? `l'adversaire a un mat en ${post.score.mate}, qui commence par` : 'la meilleure réponse est'} <span class="mono">${fr(reply.san)}</span>, ${reply.text.charAt(0).toLowerCase() + reply.text.slice(1)}</p>`;
       if (post.pv && post.pv.length > 1) html += `<p><small>Suite probable : <span class="mono">${fmtLine(after, pvToSan(after, post.pv, 5))}</span></small></p>`;
     }
-    html += `<p><small>Évaluation (pour les Blancs) : <span class="mono">${fmtEval(white(pre.score))}</span> avant, <span class="mono">${fmtEval(white(afterScore))}</span> après ce coup.</small></p>`;
+    // Sur le meilleur coup, l'écart entre les deux analyses n'est que du bruit : un seul chiffre.
+    html += kind === 'best' ? `<p><small>Évaluation (pour les Blancs) : <span class="mono">${fmtEval(white(afterScore))}</span>.</small></p>`
+      : `<p><small>Évaluation (pour les Blancs) : <span class="mono">${fmtEval(white(pre.score))}</span> avant, <span class="mono">${fmtEval(white(afterScore))}</span> après ce coup.</small></p>`;
     this.showInsight(true, `<div class="verdict ${kind}">${html}${replay}</div>`); bind();
     if (bestEx && bestEx.move) this.board.arrows([[bestEx.move.from, bestEx.move.to]]);
     if (this.coach) this.setEval(white(afterScore));
