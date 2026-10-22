@@ -1,0 +1,25 @@
+{
+  "name": "Pion Passé — progresser aux échecs",
+  "short_name": "Pion Passé",
+  "description": "Leçons, entraîneuse qui commente chaque coup et parties contre Stockfish.",
+  "lang": "fr",
+  "id": "./",
+  "start_url": "./#accueil",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f1f4ef",
+  "theme_color": "#2c6a4c",
+  "categories": ["games", "education"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Entraîneur", "url": "./#entraineur", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Jouer contre l'IA", "url": "./#jouer", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Leçons", "url": "./#lecons", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

@@ -1,0 +1,1604 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2c6a4c" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#18201b" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Progresser aux échecs : leçons, entraîneuse qui commente chaque coup, parties contre Stockfish.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Pion Passé">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>Pion Passé</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+Symbols+2&display=swap">
+<style>
+/* Table de club : échiquier vinyle vert et chamois, feuille de notation en mono, titres en slab */
+:root {
+  --bg: #f1f4ef;
+  --surface: #ffffff;
+  --sunk: #e6ebe3;
+  --ink: #18211c;
+  --muted: #5a675f;
+  --line: #d3dbd1;
+  --accent: #2c6a4c;
+  --accent-ink: #ffffff;
+  --brass: #b98b2e;
+  --sq-light: #ebe6d0;
+  --sq-dark: #6b9270;
+  --sq-sel: rgba(214, 170, 48, .55);
+  --sq-last: rgba(214, 190, 70, .38);
+  --sq-check: rgba(200, 50, 40, .55);
+  --dot: rgba(20, 40, 28, .28);
+  --arrow: rgba(37, 120, 214, .78);
+  --arrow-bad: rgba(200, 70, 40, .72);
+  --v-best: #1f8a5a; --v-good: #5e9636; --v-inacc: #b8901a; --v-mist: #d0661a; --v-blun: #c23a31;
+  --font-display: "Zilla Slab", "Rockwell", Georgia, serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-piece: "Noto Sans Symbols 2", "Segoe UI Symbol", "DejaVu Sans", sans-serif;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101512; --surface: #18201b; --sunk: #0c100e; --ink: #e5ebe6; --muted: #98a69d; --line: #2a352e;
+    --accent: #5fb98b; --accent-ink: #0c1a12; --brass: #d9ad52;
+    --sq-light: #d9d3ba; --sq-dark: #587d5d; --dot: rgba(10, 25, 15, .38);
+    --v-best: #43b47f; --v-good: #86b85a; --v-inacc: #d7ae3a; --v-mist: #e8833a; --v-blun: #e0574d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101512; --surface: #18201b; --sunk: #0c100e; --ink: #e5ebe6; --muted: #98a69d; --line: #2a352e;
+  --accent: #5fb98b; --accent-ink: #0c1a12; --brass: #d9ad52;
+  --sq-light: #d9d3ba; --sq-dark: #587d5d; --dot: rgba(10, 25, 15, .38);
+  --v-best: #43b47f; --v-good: #86b85a; --v-inacc: #d7ae3a; --v-mist: #e8833a; --v-blun: #e0574d;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 16px/1.55 var(--font-body); }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: balance; margin: 0; }
+p { margin: 0 0 .7em; }
+code, .mono { font-family: var(--font-mono); font-size: .9em; }
+code { background: var(--sunk); padding: .05em .35em; border-radius: 4px; }
+a { color: var(--accent); }
+button { font: inherit; cursor: pointer; }
+:focus-visible { outline: 3px solid var(--brass); outline-offset: 2px; }
+
+.wrap { max-width: 1160px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+/* ---------- En-tête ---------- */
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+.top .wrap { display: flex; align-items: center; gap: 20px; padding-block: 10px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); }
+.brand .mark { font-family: var(--font-piece); font-size: 28px; color: var(--accent); line-height: 1; }
+.brand b { font-family: var(--font-display); font-size: 22px; font-weight: 700; letter-spacing: .01em; }
+nav.tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-left: auto; }
+nav.tabs a { text-decoration: none; color: var(--muted); font-weight: 600; padding: 6px 12px; border-radius: 999px; font-size: 15px; }
+nav.tabs a:hover { color: var(--ink); background: var(--sunk); }
+nav.tabs a[aria-current="page"] { color: var(--accent-ink); background: var(--accent); }
+
+main section[data-view] { padding-block: 32px 64px; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--brass); font-weight: 600; }
+.lead { font-size: 18px; color: var(--muted); max-width: 62ch; }
+.sec-head { display: grid; gap: 8px; margin-bottom: 24px; }
+.sec-head h2 { font-size: clamp(28px, 4vw, 40px); }
+
+/* ---------- Boutons ---------- */
+.btn { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 8px 14px; border-radius: 8px; font-weight: 600; font-size: 15px; text-decoration: none; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.icon { padding: 8px 11px; font-family: var(--font-mono); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* ---------- Échiquier ---------- */
+.board-wrap { position: relative; width: 100%; max-width: 560px; container-type: inline-size; }
+.board { position: relative; display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr); aspect-ratio: 1; max-width: 100%; border-radius: 6px; overflow: hidden; box-shadow: 0 0 0 1px var(--line), 0 10px 30px -14px rgba(0,0,0,.35); user-select: none; touch-action: none; }
+.sq { position: relative; display: grid; place-items: center; }
+.sq.l { background: var(--sq-light); } .sq.d { background: var(--sq-dark); }
+.sq.last::before, .sq.sel::before, .sq.hl::before, .sq.check::before { content: ""; position: absolute; inset: 0; }
+.sq.last::before { background: var(--sq-last); }
+.sq.hl::before { background: rgba(60, 140, 220, .32); }
+.sq.sel::before { background: var(--sq-sel); }
+.sq.check::before { background: radial-gradient(circle, var(--sq-check) 30%, transparent 72%); }
+.sq.dest::after { content: ""; position: absolute; width: 30%; height: 30%; border-radius: 50%; background: var(--dot); pointer-events: none; }
+.sq.dest.cap::after { width: 86%; height: 86%; background: transparent; border: 6cqw solid var(--dot); border-width: .9cqw; }
+.sq .co { position: absolute; font: 600 2.1cqw/1 var(--font-mono); pointer-events: none; }
+.sq .co.f { right: 4%; bottom: 3%; } .sq .co.r { left: 4%; top: 4%; }
+.sq.l .co { color: var(--sq-dark); } .sq.d .co { color: var(--sq-light); }
+.pc { position: relative; z-index: 1; font-family: var(--font-piece); font-size: 10.4cqw; line-height: 1; cursor: grab; transform: translateY(.3cqw); }
+.pc.w { color: #fbfaf5; text-shadow: 0 0 .5cqw #1b1d1a, .18cqw .18cqw 0 #1b1d1a, -.18cqw -.18cqw 0 #1b1d1a, .18cqw -.18cqw 0 #1b1d1a, -.18cqw .18cqw 0 #1b1d1a; }
+.pc.b { color: #1c1e1b; text-shadow: 0 .2cqw .3cqw rgba(255,255,255,.25); }
+.pc.dragging { opacity: .25; }
+.ghost { position: fixed; z-index: 50; pointer-events: none; font-family: var(--font-piece); line-height: 1; transform: translate(-50%, -55%); }
+.board svg.arrows { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+.board.locked .pc { cursor: default; }
+
+/* ---------- Accueil ---------- */
+.hero { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 48px; align-items: center; }
+.hero h1 { font-size: clamp(38px, 6vw, 66px); font-weight: 700; letter-spacing: -.01em; }
+.hero h1 em { font-style: normal; color: var(--accent); }
+.hero .lead { margin-top: 16px; }
+.hero .cta { margin-top: 24px; }
+.hero figure { margin: 0; display: grid; gap: 10px; justify-items: center; }
+.hero figcaption { font-size: 14px; color: var(--muted); text-align: center; max-width: 46ch; }
+.hero figcaption .mono { color: var(--ink); }
+.paths { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 56px; }
+.path { display: grid; gap: 6px; align-content: start; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); text-decoration: none; color: var(--ink); transition: border-color .15s, transform .15s; }
+.path:hover { border-color: var(--accent); transform: translateY(-2px); }
+.path .g { font-family: var(--font-piece); font-size: 34px; color: var(--accent); line-height: 1; }
+.path h3 { font-size: 22px; }
+.path p { color: var(--muted); margin: 0; }
+.path .go { font-weight: 700; color: var(--accent); margin-top: 6px; }
+
+/* ---------- Leçons ---------- */
+.lessons { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 32px; align-items: start; }
+.catalog { display: grid; gap: 20px; position: sticky; top: 76px; max-height: calc(100vh - 96px); overflow: auto; padding-right: 4px; }
+.catalog h3 { font-size: 15px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+.catalog ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.catalog button { width: 100%; text-align: left; display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; align-items: start; border: 0; background: none; color: var(--ink); padding: 8px 10px; border-radius: 8px; }
+.catalog button:hover { background: var(--sunk); }
+.catalog button[aria-current="true"] { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+.catalog .st { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); margin-top: 3px; display: grid; place-items: center; font-size: 11px; color: var(--accent-ink); }
+.catalog .done .st { background: var(--accent); border-color: var(--accent); }
+.catalog .t { font-weight: 600; line-height: 1.3; }
+.catalog .lv { display: block; font-size: 13px; color: var(--muted); font-weight: 400; }
+.player { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 360px); gap: 28px; align-items: start; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; display: grid; gap: 14px; }
+.panel h2 { font-size: 28px; }
+.panel h3 { font-size: 19px; }
+.panel .body { min-width: 0; }
+.panel .body ul { padding-left: 1.2em; margin: 0 0 .7em; }
+.values { list-style: none; padding: 0 !important; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+.values .g, .g { font-family: var(--font-piece); }
+.try { font-weight: 600; color: var(--accent); }
+.steps { display: flex; gap: 6px; }
+.steps i { width: 26px; height: 5px; border-radius: 3px; background: var(--line); }
+.steps i.on { background: var(--accent); }
+.steps i.seen { background: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.feedback { border-radius: 8px; padding: 10px 12px; font-weight: 600; display: none; }
+.feedback.ok { display: block; background: color-mix(in srgb, var(--v-best) 16%, transparent); color: var(--v-best); }
+.feedback.ko { display: block; background: color-mix(in srgb, var(--v-blun) 14%, transparent); color: var(--v-blun); }
+.feedback.info { display: block; background: var(--sunk); color: var(--muted); font-weight: 400; }
+.movecomment { min-height: 3.2em; padding: 10px 12px; border-radius: 8px; background: var(--sunk); }
+.movecomment .mono { font-weight: 600; color: var(--accent); margin-right: 6px; }
+.nav-steps { display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid var(--line); padding-top: 14px; }
+
+/* ---------- Histoire ---------- */
+.timeline { position: relative; display: grid; gap: 0; max-width: 860px; }
+.timeline::before { content: ""; position: absolute; left: 118px; top: 8px; bottom: 8px; width: 2px; background: var(--line); }
+.ev { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 36px; padding-block: 14px; position: relative; }
+.ev .y { font-family: var(--font-mono); font-weight: 600; text-align: right; color: var(--accent); padding-top: 3px; font-size: 15px; }
+.ev .y small { display: block; color: var(--muted); font-weight: 400; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+.ev::after { content: ""; position: absolute; left: 112px; top: 22px; width: 14px; height: 14px; border-radius: 50%; background: var(--bg); border: 3px solid var(--accent); }
+.ev h3 { font-size: 21px; margin-bottom: 4px; }
+.ev p { color: var(--muted); max-width: 64ch; margin: 0; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 40px; }
+.fact { padding: 18px; border-radius: var(--radius); background: var(--sunk); }
+.fact b { display: block; font-family: var(--font-display); font-size: 30px; color: var(--accent); }
+
+/* ---------- Arène (jouer / entraîneur) ---------- */
+.arena { display: grid; grid-template-columns: minmax(0, 600px) minmax(0, 1fr); gap: 24px; align-items: start; }
+.boardcol { display: flex; gap: 10px; align-items: stretch; min-width: 0; }
+.boardcol .board-wrap { flex: 1; min-width: 0; }
+.evalbar { flex: none; width: 22px; border-radius: 5px; overflow: hidden; background: #262a27; position: relative; box-shadow: 0 0 0 1px var(--line); }
+.evalbar .w { position: absolute; left: 0; right: 0; bottom: 0; height: 50%; background: #f2f0e8; transition: height .4s ease; }
+.evalbar .lbl { position: absolute; left: 0; right: 0; bottom: 5px; font: 600 9px/1 var(--font-mono); text-align: center; z-index: 1; color: #262a27; }
+.side { display: grid; gap: 14px; min-width: 0; }
+.controls { display: grid; gap: 10px; }
+.controls label { font-size: 13px; color: var(--muted); font-weight: 600; display: grid; gap: 4px; }
+select { font: inherit; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: var(--surface); color: var(--ink); padding: 7px 12px; font-weight: 600; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.status { font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.status .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.moves { font-family: var(--font-mono); font-size: 14px; max-height: 220px; overflow: auto; background: var(--sunk); border-radius: 8px; padding: 8px 10px; display: grid; grid-template-columns: 3ch 1fr 1fr; gap: 2px 10px; align-content: start; }
+.moves .n { color: var(--muted); }
+.moves .mv { white-space: nowrap; }
+.moves .mv i { font-style: normal; display: inline-block; width: .7em; height: .7em; border-radius: 50%; margin-left: 4px; vertical-align: middle; }
+.moves:empty::before { content: "Les coups apparaîtront ici."; grid-column: 1 / -1; color: var(--muted); font-family: var(--font-body); }
+.verdict { border-left: 5px solid var(--muted); background: var(--surface); border-radius: 8px; padding: 14px 16px; display: grid; gap: 8px; box-shadow: inset 0 0 0 1px var(--line); }
+.verdict .tag { font-family: var(--font-display); font-weight: 700; font-size: 22px; }
+.verdict .mono { font-weight: 600; }
+.verdict p { margin: 0; }
+.verdict small { color: var(--muted); }
+.verdict.best { border-color: var(--v-best); } .verdict.best .tag { color: var(--v-best); }
+.verdict.good { border-color: var(--v-good); } .verdict.good .tag { color: var(--v-good); }
+.verdict.inacc { border-color: var(--v-inacc); } .verdict.inacc .tag { color: var(--v-inacc); }
+.verdict.mist { border-color: var(--v-mist); } .verdict.mist .tag { color: var(--v-mist); }
+.verdict.blun { border-color: var(--v-blun); } .verdict.blun .tag { color: var(--v-blun); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; background: var(--c); }
+.result { font-family: var(--font-display); font-size: 24px; font-weight: 700; color: var(--accent); }
+.engine-note { font-size: 13px; color: var(--muted); }
+.voicebox { gap: 10px; padding: 16px 18px; }
+.voicebox label { font-size: 13px; color: var(--muted); font-weight: 600; display: grid; gap: 4px; }
+.voicebox select { min-width: 0; width: 100%; }
+.voice-tag { font-size: 13px; font-weight: 700; color: var(--v-best); }
+.voice-tip:empty { display: none; }
+.tally { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; text-align: center; font-size: 12px; color: var(--muted); }
+.tally b { display: block; font: 700 20px/1.2 var(--font-mono); color: var(--c); }
+
+footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+footer .wrap { padding-block: 22px; }
+
+@media (max-width: 960px) {
+  .hero { grid-template-columns: 1fr; gap: 28px; }
+  .lessons { grid-template-columns: 1fr; }
+  .catalog { position: static; max-height: none; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .player { grid-template-columns: 1fr; }
+  .arena { grid-template-columns: minmax(0, 1fr); }
+  .paths, .facts { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  nav.tabs { margin-left: 0; }
+  nav.tabs a { padding: 5px 9px; font-size: 14px; }
+  .timeline::before { left: 7px; }
+  .ev { grid-template-columns: 1fr; gap: 2px; padding-left: 28px; }
+  .ev .y { text-align: left; }
+  .ev::after { left: 1px; top: 18px; }
+  .evalbar { width: 12px; }
+  .evalbar .lbl { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+/* ---------- Application mobile : barre d'onglets en bas, cibles tactiles, plein écran ---------- */
+html { -webkit-tap-highlight-color: transparent; }
+body { overscroll-behavior-y: none; }
+button, a, select, .sq { touch-action: manipulation; }
+nav.appbar { display: none; }
+.install { display: none; }
+.install.show { display: inline-flex; }
+.ios-tip { display: none; margin-top: 10px; font-size: 14px; color: var(--muted); }
+.ios-tip.show { display: block; }
+
+@media (max-width: 760px) {
+  .top nav.tabs { display: none; }
+  .top .wrap { padding-block: 8px; justify-content: space-between; }
+  main { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+  main section[data-view] { padding-block: 18px 32px; }
+  footer { display: none; }
+  nav.appbar { display: grid; margin: 0; gap: 0; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+    background: var(--surface); border-top: 1px solid var(--line);
+    padding: 4px max(6px, env(safe-area-inset-left, 0px)) calc(4px + env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-right, 0px)); }
+  nav.appbar a { display: grid; justify-items: center; gap: 1px; padding: 6px 0 4px; min-height: 52px; text-decoration: none; color: var(--muted);
+    font-size: 11.5px; font-weight: 600; border-radius: 12px; }
+  nav.appbar a .g { font-family: var(--font-piece); font-size: 24px; line-height: 1.1; }
+  nav.appbar a:hover { background: none; color: var(--muted); }
+  nav.appbar a[aria-current="page"] { font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  /* Sur les écrans de jeu, l'échiquier passe avant le texte d'introduction. */
+  [data-view="entraineur"] .sec-head .lead, [data-view="jouer"] .sec-head .lead { display: none; }
+  [data-view="entraineur"] .sec-head h2, [data-view="jouer"] .sec-head h2 { font-size: 24px; }
+  .btn, .seg button, select { min-height: 44px; }
+  .btn.icon { min-width: 44px; justify-content: center; }
+  .catalog button { padding: 11px 10px; }
+  .sec-head { margin-bottom: 14px; }
+  .lead { font-size: 16px; }
+  .panel { padding: 16px; }
+  .hero h1 { font-size: 36px; }
+  .board-wrap { max-width: none; }
+  .arena { gap: 14px; }
+  .moves { max-height: 150px; }
+}
+
+/* Lancée depuis l'écran d'accueil : pas de marges de navigateur, en-tête compact. */
+@media (display-mode: standalone) {
+  .top .wrap { padding-block: 6px; }
+  .brand b { font-size: 20px; }
+}
+</style>
+
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#accueil"><span class="mark">♟&#xFE0E;</span><b>Pion Passé</b></a>
+    <nav class="tabs" aria-label="Sections">
+      <a href="#accueil">Accueil</a>
+      <a href="#lecons">Leçons</a>
+      <a href="#entraineur">Entraîneur</a>
+      <a href="#jouer">Jouer</a>
+      <a href="#histoire">Histoire</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- ACCUEIL -->
+  <section data-view="accueil" class="wrap">
+    <div class="hero">
+      <div>
+        <span class="eyebrow">Débutant · Intermédiaire</span>
+        <h1>Chaque partie te rapproche de la <em>promotion</em>.</h1>
+        <p class="lead">Apprends les règles et les ouvertures en les jouant, entraîne-toi sur les motifs tactiques, puis joue contre un entraîneur qui juge chacun de tes coups et t'explique le meilleur.</p>
+        <div class="cta row">
+          <a class="btn primary" href="#entraineur">Jouer avec l'entraîneur</a>
+          <a class="btn" href="#lecons">Commencer les leçons</a>
+        </div>
+      </div>
+      <figure>
+        <div class="board-wrap" id="hero-board" style="max-width:440px"></div>
+        <figcaption><span class="mono" id="hero-move">1. e4</span> · Morphy contre le duc de Brunswick et le comte Isouard, Opéra de Paris, 1858.</figcaption>
+      </figure>
+    </div>
+    <div class="paths">
+      <a class="path" href="#lecons/echiquier"><span class="g">♟&#xFE0E;</span><h3>Je découvre</h3><p>L'échiquier, la marche des pièces, les coups spéciaux et le mat.</p><span class="go">5 leçons de base →</span></a>
+      <a class="path" href="#lecons/italienne"><span class="g">♞</span><h3>Je connais les règles</h3><p>Huit ouvertures expliquées coup par coup, puis rejouées de mémoire.</p><span class="go">Ouvertures et tactiques →</span></a>
+      <a class="path" href="#entraineur"><span class="g">♛</span><h3>Je veux jouer</h3><p>Huit niveaux d'IA et un entraîneur qui note chaque coup, de « Meilleur » à « Gaffe ».</p><span class="go">Lancer une partie →</span></a>
+    </div>
+  </section>
+
+  <!-- LEÇONS -->
+  <section data-view="lecons" class="wrap" hidden>
+    <div class="sec-head">
+      <span class="eyebrow">Leçons</span>
+      <h2>Apprends en déplaçant les pièces</h2>
+    </div>
+    <div class="lessons">
+      <aside class="catalog" id="catalog" aria-label="Liste des leçons"></aside>
+      <div class="player">
+        <div class="board-wrap" id="lesson-board"></div>
+        <div class="panel" id="lesson-panel"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ENTRAÎNEUR -->
+  <section data-view="entraineur" class="wrap" hidden>
+    <div class="sec-head">
+      <span class="eyebrow">Mode entraîneur</span>
+      <h2>Joue, l'entraîneur commente chaque coup</h2>
+      <p class="lead">Après chacun de tes coups, Stockfish compare ta décision au meilleur coup. Si tu t'es trompé, l'entraîneuse t'explique pourquoi, à voix haute si tu le souhaites, et tu peux reprendre ton coup.</p>
+    </div>
+    <div class="arena" id="coach-arena"></div>
+  </section>
+
+  <!-- JOUER -->
+  <section data-view="jouer" class="wrap" hidden>
+    <div class="sec-head">
+      <span class="eyebrow">Partie libre</span>
+      <h2>Affronte l'IA</h2>
+      <p class="lead">Huit niveaux, de « Découverte » qui laisse des pièces en prise à « Maître » qui ne pardonne rien.</p>
+    </div>
+    <div class="arena" id="play-arena"></div>
+  </section>
+
+  <!-- HISTOIRE -->
+  <section data-view="histoire" class="wrap" hidden>
+    <div class="sec-head">
+      <span class="eyebrow">Histoire</span>
+      <h2>Quinze siècles sur 64 cases</h2>
+      <p class="lead">De l'armée indienne du chaturanga aux moteurs qui battent les champions, les grandes étapes du jeu.</p>
+    </div>
+    <div class="timeline" id="timeline"></div>
+    <div class="facts">
+      <div class="fact"><b>10<sup>120</sup></b>Nombre estimé de parties possibles (le « nombre de Shannon »), bien plus que d'atomes dans l'univers observable.</div>
+      <div class="fact"><b>1475</b>Date approximative de la partie de Valence où la dame moderne apparaît, dans un poème catalan.</div>
+      <div class="fact"><b>Elo</b>Le classement des joueurs porte le nom d'Arpad Elo, physicien qui l'a conçu pour les échecs.</div>
+    </div>
+  </section>
+</main>
+
+<footer><div class="wrap">Pion Passé · Moteur Stockfish (GPL) exécuté dans ton navigateur · Notation française : R roi, D dame, T tour, F fou, C cavalier.</div></footer>
+
+<script src="chess.js"></script>
+
+<script>
+/* ---------- Contenus : leçons, ouvertures, tactiques, histoire ---------- */
+const EMPTY_KINGS = '4k3/8/8/8/8/8/8/4K3';
+
+const LESSONS = [
+  /* ===================== LES BASES ===================== */
+  {
+    id: 'echiquier', group: 'bases', level: 'Débutant', title: "L'échiquier et les pièces",
+    summary: "Les 64 cases, la position de départ et la valeur des pièces.",
+    steps: [
+      { title: "64 cases, deux camps", fen: 'start',
+        text: "<p>L'échiquier compte 64 cases. Les colonnes portent une lettre de <b>a</b> à <b>h</b>, les rangées un chiffre de <b>1</b> à <b>8</b>. Chaque case a donc un nom : le roi blanc commence en <b>e1</b>, la dame noire en <b>d8</b>.</p><p>Repère utile : la case en bas à droite de chaque joueur est toujours <b>blanche</b>. Et la dame se place sur sa couleur : dame blanche sur case blanche, dame noire sur case noire.</p>",
+        hl: ['e1', 'd8', 'h1'] },
+      { title: "La valeur des pièces", fen: 'start',
+        text: "<p>Pour savoir si un échange est bon, on compte les points :</p><ul class='values'><li><span class='g'>♟</span> Pion <b>1</b></li><li><span class='g'>♞</span> Cavalier <b>3</b></li><li><span class='g'>♝</span> Fou <b>3</b></li><li><span class='g'>♜</span> Tour <b>5</b></li><li><span class='g'>♛</span> Dame <b>9</b></li><li><span class='g'>♚</span> Roi : inestimable</li></ul><p>Donner un fou (3) pour prendre une tour (5), c'est gagner « la qualité ».</p>" },
+      { title: "La notation", fen: 'start', arrows: [['g1', 'f3']],
+        text: "<p>On note un coup avec l'initiale de la pièce et sa case d'arrivée. En français : <b>R</b> roi, <b>D</b> dame, <b>T</b> tour, <b>F</b> fou, <b>C</b> cavalier. Le pion n'a pas d'initiale.</p><p><code>Cf3</code> : le cavalier va en f3. <code>e4</code> : un pion va en e4. <code>Fxc6</code> : le fou prend en c6. <code>+</code> signale un échec, <code>#</code> un échec et mat.</p>" }
+    ]
+  },
+  {
+    id: 'deplacements', group: 'bases', level: 'Débutant', title: "Comment bougent les pièces",
+    summary: "Bouge chaque pièce librement sur l'échiquier pour voir où elle peut aller.",
+    steps: [
+      { title: "La tour", fen: '4k3/8/8/8/3R4/8/8/4K3 w - - 0 1', sandbox: true,
+        text: "<p>La tour avance en ligne droite, horizontalement ou verticalement, d'autant de cases qu'elle veut, tant que rien ne la bloque.</p><p class='try'>Clique sur la tour pour voir ses cases, puis déplace-la.</p>" },
+      { title: "Le fou", fen: '4k3/8/8/8/3B4/8/8/4K3 w - - 0 1', sandbox: true,
+        text: "<p>Le fou se déplace en diagonale. Il reste toute la partie sur la même couleur de case : chaque camp a un fou des cases blanches et un fou des cases noires.</p><p class='try'>Déplace le fou et vérifie qu'il ne change jamais de couleur.</p>" },
+      { title: "La dame", fen: '4k3/8/8/8/3Q4/8/8/4K3 w - - 0 1', sandbox: true,
+        text: "<p>La dame combine la tour et le fou : lignes droites et diagonales. C'est la pièce la plus puissante, ne la sors pas trop tôt, elle se ferait chasser.</p><p class='try'>Compte les cases que contrôle la dame au centre : 27 !</p>" },
+      { title: "Le cavalier", fen: '4k3/8/8/8/3N4/8/8/4K3 w - - 0 1', sandbox: true,
+        text: "<p>Le cavalier saute en « L » : deux cases dans un sens puis une sur le côté. C'est la seule pièce qui peut sauter par-dessus les autres. À chaque saut, il change de couleur de case.</p><p class='try'>Un cavalier au bord contrôle peu de cases : amène-le en a1 pour le voir.</p>" },
+      { title: "Le roi", fen: '4k3/8/8/8/3K4/8/8/8 w - - 0 1', sandbox: true,
+        text: "<p>Le roi se déplace d'une seule case, dans toutes les directions. Il ne peut jamais aller sur une case attaquée par l'adversaire.</p><p>En fin de partie, quand les dames ont disparu, le roi devient une pièce d'attaque : centralise-le.</p>" },
+      { title: "Le pion", fen: '4k3/8/8/2p5/8/8/3P4/4K3 w - - 0 1', sandbox: true,
+        text: "<p>Le pion avance tout droit d'une case, ou de deux cases lors de son tout premier coup. Mais il <b>prend en diagonale</b>, une case en avant.</p><p class='try'>Avance le pion d2 en d4, puis prends le pion noir en c5.</p>" }
+    ]
+  },
+  {
+    id: 'speciaux', group: 'bases', level: 'Débutant', title: "Les coups spéciaux",
+    summary: "Le roque, la prise en passant et la promotion.",
+    steps: [
+      { title: "Le petit roque", fen: 'r3k2r/pppq1ppp/2npbn2/4p3/2B1P3/2NP1N2/PPPQ1PPP/R3K2R w KQkq - 0 1',
+        task: { line: ['O-O'], hint: "Fais glisser le roi de deux cases vers la tour de h1." },
+        text: "<p>Le roque déplace le roi et une tour en un seul coup : le roi glisse de deux cases vers la tour, et la tour saute de l'autre côté du roi.</p><p>Conditions : ni le roi ni la tour n'ont bougé, aucune pièce entre eux, le roi n'est pas en échec et ne traverse pas une case attaquée.</p><p class='try'>Fais le petit roque (O-O).</p>" },
+      { title: "Le grand roque", fen: 'r3k2r/pppq1ppp/2npbn2/4p3/2B1P3/2NP1N2/PPPQ1PPP/R3K2R w KQkq - 0 1',
+        task: { line: ['O-O-O'], hint: "Fais glisser le roi de deux cases vers la tour de a1." },
+        text: "<p>Le grand roque se fait côté dame : le roi va en c1 et la tour en d1. Il met la tour directement sur la colonne centrale d.</p><p class='try'>Fais le grand roque (O-O-O).</p>" },
+      { title: "La prise en passant", fen: 'rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3', arrows: [['f7', 'f5']],
+        task: { line: ['exf6'], hint: "Le pion e5 peut prendre le pion f5 comme s'il n'avait avancé que d'une case." },
+        text: "<p>Le pion noir vient d'avancer de deux cases (f7-f5) et s'est arrêté juste à côté de ton pion e5. Tu as le droit de le prendre <b>en passant</b>, comme s'il n'avait avancé que d'une case : ton pion arrive en f6.</p><p>Attention, ce droit ne vaut que pour le coup qui suit immédiatement.</p><p class='try'>Prends en passant : exf6.</p>" },
+      { title: "La promotion", fen: '8/4P1k1/8/8/8/8/5K2/8 w - - 0 1',
+        task: { line: ['e8=Q'], hint: "Avance le pion jusqu'à la dernière rangée." },
+        text: "<p>Quand un pion atteint la dernière rangée, il se transforme en la pièce de ton choix (sauf un roi). On choisit presque toujours une dame.</p><p class='try'>Promeus ton pion en dame.</p>" }
+    ]
+  },
+  {
+    id: 'mat', group: 'bases', level: 'Débutant', title: "Échec et mat",
+    summary: "Le but du jeu, le mat du couloir et le mat du berger.",
+    steps: [
+      { title: "Échec, échec et mat, pat", fen: '6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1',
+        text: "<p>Un roi attaqué est <b>en échec</b> : son camp doit parer tout de suite (bouger le roi, prendre l'attaquant ou s'interposer).</p><p>S'il n'existe aucune parade, c'est <b>échec et mat</b> et la partie est finie.</p><p>Si un joueur n'a aucun coup légal sans être en échec, c'est le <b>pat</b> : partie nulle. Attention à ne pas « pater » quand tu gagnes !</p>" },
+      { title: "Le mat du couloir", fen: '6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1',
+        task: { line: ['Rd8#'], hint: "Le roi noir est enfermé derrière ses propres pions." },
+        text: "<p>Le roi noir est bloqué par ses trois pions. Une tour sur la dernière rangée suffit à le mater.</p><p>C'est pour cela qu'on fait souvent un petit coup de pion (h3 ou h6) pour donner « une case de fuite » au roi.</p><p class='try'>Trouve le mat en un coup.</p>" },
+      { title: "Le mat du berger", fen: 'start',
+        moves: [['e4', "Les Blancs ouvrent la diagonale du fou et de la dame."], ['e5', ""], ['Bc4', "Le fou vise f7, le point faible : il n'est défendu que par le roi."], ['Nc6', ""], ['Qh5', "La dame attaque f7 une deuxième fois (et menace aussi e5)."], ['Nf6', "Erreur ! Le cavalier attaque la dame mais ne défend pas f7. Il fallait jouer ...g6 ou ...De7."], ['Qxf7#', "Échec et mat. La dame est protégée par le fou, le roi ne peut pas la prendre."]],
+        text: "<p>Le piège le plus célèbre des débutants. Avance coup par coup avec les flèches pour comprendre l'idée, puis retiens la parade : <b>...De7</b> ou <b>...g6</b>.</p>" },
+      { title: "À toi : le mat étouffé", fen: '6rk/6pp/8/4N3/8/8/8/6K1 w - - 0 1',
+        task: { line: ['Nf7#'], hint: "Le roi noir n'a aucune case : ses propres pièces l'étouffent." },
+        text: "<p>Le roi noir est entouré par sa tour et ses pions. Un seul cavalier peut le mater.</p><p class='try'>Trouve le mat en un coup.</p>" }
+    ]
+  },
+  {
+    id: 'principes', group: 'bases', level: 'Débutant', title: "Les 5 principes de l'ouverture",
+    summary: "Centre, développement, roque : les règles qui marchent dans toutes les ouvertures.",
+    steps: [
+      { title: "1. Occupe le centre", fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1', hl: ['d4', 'e4', 'd5', 'e5'],
+        text: "<p>Les quatre cases centrales (d4, e4, d5, e5) sont les plus importantes : une pièce au centre contrôle plus de cases et peut aller vite des deux côtés.</p><p>Commence par avancer un pion central : <code>e4</code> ou <code>d4</code>.</p>" },
+      { title: "2. Développe tes pièces", fen: 'r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4', arrows: [['b1', 'c3']],
+        text: "<p>Sors les cavaliers et les fous vers le centre avant de faire d'autres coups. Retiens : <b>les cavaliers avant les fous</b>, et chaque pièce ne bouge qu'une fois dans l'ouverture si possible.</p>" },
+      { title: "3. Roque tôt", fen: 'r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 6 5', arrows: [['e1', 'g1']],
+        text: "<p>Le roi au centre est en danger dès que les lignes s'ouvrent. Roquer met le roi à l'abri et connecte les tours. Ici, <code>O-O</code> est le bon coup.</p>" },
+      { title: "4. Ne sors pas la dame trop tôt", fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5Q2/PPPP1PPP/RNB1KBNR b KQkq - 1 2',
+        text: "<p>Une dame sortie au deuxième coup se fait chasser par les pièces adverses, qui se développent en gagnant du temps (on dit des « tempos »).</p>" },
+      { title: "5. Ne perds pas de temps", fen: 'start',
+        text: "<p>Évite de jouer plusieurs coups de pions de bord (a3, h3...) ou de bouger deux fois la même pièce sans raison. Après une dizaine de coups, toutes tes pièces mineures devraient être sorties et ton roi roqué.</p><p>Dans la section <b>Ouvertures</b>, tu verras ces principes appliqués dans de vraies ouvertures.</p>" }
+    ]
+  },
+
+  /* ===================== OUVERTURES ===================== */
+  {
+    id: 'italienne', group: 'ouvertures', level: 'Débutant', side: 'w', title: "Partie italienne",
+    summary: "1.e4 e5 2.Cf3 Cc6 3.Fc4 : la plus naturelle des ouvertures.",
+    line: [
+      ['e4', "Le pion occupe le centre et libère le fou et la dame."],
+      ['e5', "Les Noirs répondent symétriquement."],
+      ['Nf3', "Le cavalier se développe en attaquant le pion e5."],
+      ['Nc6', "Les Noirs défendent e5 en développant."],
+      ['Bc4', "Le fou vise f7, le point faible près du roi noir."],
+      ['Bc5', "Les Noirs aussi visent f7 (le Giuoco Piano, « jeu tranquille »)."],
+      ['c3', "Prépare d4 pour construire un grand centre."],
+      ['Nf6', "Les Noirs attaquent e4 et préparent le roque."],
+      ['d3', "Les Blancs consolident e4 sans se presser."],
+      ['d6', "Même plan pour les Noirs : solidité."],
+      ['O-O', "Le roi est à l'abri."],
+      ['O-O', "Les deux camps ont fini leur développement."]
+    ]
+  },
+  {
+    id: 'espagnole', group: 'ouvertures', level: 'Intermédiaire', side: 'w', title: "Partie espagnole",
+    summary: "1.e4 e5 2.Cf3 Cc6 3.Fb5 : l'ouverture des champions du monde.",
+    line: [
+      ['e4', "Pion central."], ['e5', ""],
+      ['Nf3', "Attaque e5."], ['Nc6', "Défend e5."],
+      ['Bb5', "Le fou attaque le défenseur de e5 : la pression est indirecte mais durable."],
+      ['a6', "La « défense Morphy » : on demande au fou ce qu'il compte faire."],
+      ['Ba4', "Le fou garde la pression sur le cavalier."],
+      ['Nf6', "Les Noirs contre-attaquent e4."],
+      ['O-O', "Les Blancs roquent : prendre en e5 n'est pas encore une menace."],
+      ['Be7', "Développement solide, prépare le roque."],
+      ['Re1', "La tour protège e4 et vient sur la colonne e."],
+      ['b5', "Chasse le fou pour libérer la position."],
+      ['Bb3', "Le fou se replace sur la diagonale de f7."],
+      ['d6', "Consolide e5."],
+      ['c3', "Prépare d4 et garde une case de retraite au fou en c2."],
+      ['O-O', "Position classique de l'Espagnole fermée."]
+    ]
+  },
+  {
+    id: 'gambit-dame', group: 'ouvertures', level: 'Débutant', side: 'w', title: "Gambit dame",
+    summary: "1.d4 d5 2.c4 : on offre un pion pour dominer le centre.",
+    line: [
+      ['d4', "Pion central, protégé par la dame."],
+      ['d5', "Les Noirs bloquent."],
+      ['c4', "Le gambit : le pion c4 attaque d5. S'il est pris, les Blancs le récupèrent facilement."],
+      ['e6', "Gambit dame refusé : les Noirs soutiennent d5."],
+      ['Nc3', "Plus de pression sur d5."],
+      ['Nf6', "Défend d5 et développe."],
+      ['Bg5', "Cloue le cavalier f6 qui défend d5."],
+      ['Be7', "Déloue le cavalier."],
+      ['e3', "Ouvre la diagonale du fou f1."],
+      ['O-O', "Roi à l'abri."],
+      ['Nf3', "Développement harmonieux, les Blancs vont roquer."]
+    ]
+  },
+  {
+    id: 'londres', group: 'ouvertures', level: 'Débutant', side: 'w', title: "Système de Londres",
+    summary: "1.d4 2.Ff4 : un schéma simple à jouer contre presque tout.",
+    line: [
+      ['d4', "Pion central."], ['d5', ""],
+      ['Bf4', "Le fou sort avant e3, sinon il serait enfermé."],
+      ['Nf6', ""],
+      ['e3', "Solidifie d4 et ouvre la voie au fou f1."],
+      ['e6', ""],
+      ['Nf3', "Développement naturel."],
+      ['c5', "Les Noirs attaquent le centre."],
+      ['c3', "Le pion c3 soutient d4 : la structure en triangle typique du Londres."],
+      ['Nc6', ""],
+      ['Nbd2', "Le cavalier va en d2 pour ne pas gêner le pion c3."],
+      ['Bd6', "Les Noirs veulent échanger le bon fou blanc."],
+      ['Bg3', "Les Blancs gardent leur fou et laissent les Noirs décider."]
+    ]
+  },
+  {
+    id: 'sicilienne', group: 'ouvertures', level: 'Intermédiaire', side: 'b', title: "Défense sicilienne",
+    summary: "1.e4 c5 : la réponse combative des Noirs.",
+    line: [
+      ['e4', "Les Blancs ouvrent avec le pion roi."],
+      ['c5', "La Sicilienne : les Noirs contrôlent d4 sans copier les Blancs. Le jeu sera déséquilibré."],
+      ['Nf3', "Prépare d4."],
+      ['d6', "Contrôle e5 et libère le fou c8."],
+      ['d4', "Les Blancs ouvrent le centre."],
+      ['cxd4', "Les Noirs échangent un pion de côté contre un pion central."],
+      ['Nxd4', "Le cavalier reprend, centralisé."],
+      ['Nf6', "Attaque e4 en développant."],
+      ['Nc3', "Défend e4."],
+      ['a6', "La Najdorf, l'arme de Fischer et Kasparov : contrôle b5 et prépare ...e5 ou ...b5."]
+    ]
+  },
+  {
+    id: 'francaise', group: 'ouvertures', level: 'Intermédiaire', side: 'b', title: "Défense française",
+    summary: "1.e4 e6 : solide, avec un plan clair contre le centre blanc.",
+    line: [
+      ['e4', ""],
+      ['e6', "La Française : on prépare ...d5 avec un pion soutenu."],
+      ['d4', "Les Blancs prennent tout le centre."],
+      ['d5', "Les Noirs contestent e4 tout de suite."],
+      ['Nc3', "Défend e4."],
+      ['Nf6', "Deuxième attaque sur e4."],
+      ['Bg5', "Cloue le cavalier défenseur."],
+      ['Be7', "Déloue."],
+      ['e5', "Les Blancs gagnent de l'espace et chassent le cavalier."],
+      ['Nfd7', "Le cavalier recule et prépare ...c5 pour attaquer la chaîne de pions blancs à sa base."]
+    ]
+  },
+  {
+    id: 'caro-kann', group: 'ouvertures', level: 'Intermédiaire', side: 'b', title: "Défense Caro-Kann",
+    summary: "1.e4 c6 : très solide, le fou c8 sort avant d'être enfermé.",
+    line: [
+      ['e4', ""],
+      ['c6', "Prépare ...d5 en gardant la diagonale du fou c8 ouverte (contrairement à la Française)."],
+      ['d4', ""],
+      ['d5', "Attaque e4."],
+      ['Nc3', "Défend e4."],
+      ['dxe4', "Les Noirs échangent au centre."],
+      ['Nxe4', ""],
+      ['Bf5', "Le fou sort avec gain de temps sur le cavalier."],
+      ['Ng3', "Le cavalier attaque le fou."],
+      ['Bg6', "Le fou recule mais reste actif : structure saine, pas de faiblesse."]
+    ]
+  },
+  {
+    id: 'scandinave', group: 'ouvertures', level: 'Débutant', side: 'b', title: "Défense scandinave",
+    summary: "1.e4 d5 : on attaque le centre dès le premier coup.",
+    line: [
+      ['e4', ""],
+      ['d5', "Les Noirs attaquent e4 immédiatement."],
+      ['exd5', ""],
+      ['Qxd5', "La dame reprend : exception au principe, car elle a une bonne case de repli."],
+      ['Nc3', "Les Blancs se développent en chassant la dame."],
+      ['Qa5', "La dame se met en a5, d'où elle cloue le cavalier c3."],
+      ['d4', ""],
+      ['Nf6', "Développement."],
+      ['Nf3', ""],
+      ['Bf5', "Le fou sort avant ...e6 : position simple et active."]
+    ]
+  },
+
+  /* ===================== TACTIQUES ===================== */
+  {
+    id: 'fourchette', group: 'tactiques', level: 'Intermédiaire', title: "La fourchette",
+    summary: "Une pièce attaque deux cibles à la fois.",
+    steps: [
+      { title: "L'idée", fen: 'r3k3/pp3ppp/8/1N6/8/8/PPP2PPP/4K3 w - - 0 1', arrows: [['b5', 'c7']],
+        text: "<p>Une <b>fourchette</b>, c'est une attaque double : une pièce menace deux pièces adverses en même temps. L'adversaire ne peut en sauver qu'une.</p><p>Le cavalier est le roi de la fourchette, car ses attaques ne peuvent pas être bloquées.</p>" },
+      { title: "Exercice", fen: 'r3k3/pp3ppp/8/1N6/8/8/PPP2PPP/4K3 w - - 0 1',
+        task: { line: ['Nc7+'], hint: "Cherche une case d'où le cavalier attaque le roi ET la tour.", success: "Fourchette royale ! Le roi doit bouger et le cavalier prend la tour a8." },
+        text: "<p class='try'>Les Blancs jouent. Gagne la tour noire.</p>" }
+    ]
+  },
+  {
+    id: 'clouage', group: 'tactiques', level: 'Intermédiaire', title: "Le clouage",
+    summary: "Une pièce ne peut pas bouger sans exposer une pièce plus importante.",
+    steps: [
+      { title: "L'idée", fen: '4k3/pp3ppp/3p4/4n3/8/8/PP3PPP/4R1K1 w - - 0 1', hl: ['e1', 'e5', 'e8'],
+        text: "<p>Le cavalier e5 est <b>cloué</b> : s'il bougeait, la tour e1 attaquerait le roi e8. Il n'a donc pas le droit de bouger.</p><p>Une pièce clouée est une cible : attaque-la avec une pièce de moindre valeur.</p>" },
+      { title: "Exercice", fen: '4k3/pp3ppp/3p4/4n3/8/8/PP3PPP/4R1K1 w - - 0 1',
+        task: { line: ['f4'], hint: "Un simple pion peut attaquer le cavalier qui ne peut pas fuir.", success: "Le cavalier cloué est perdu : il ne peut pas s'enfuir." },
+        text: "<p class='try'>Les Blancs jouent et gagnent le cavalier.</p>" }
+    ]
+  },
+  {
+    id: 'enfilade', group: 'tactiques', level: 'Intermédiaire', title: "L'enfilade",
+    summary: "On attaque une grosse pièce qui, en s'écartant, laisse prendre celle de derrière.",
+    steps: [
+      { title: "L'idée", fen: '8/3k3q/8/8/8/8/8/R5K1 w - - 0 1', arrows: [['a1', 'a7']],
+        text: "<p>L'<b>enfilade</b> est le contraire du clouage : la pièce de valeur est devant. Quand elle s'écarte (ici le roi, obligé de sortir de l'échec), la pièce située derrière tombe.</p>" },
+      { title: "Exercice", fen: '8/3k3q/8/8/8/8/8/R5K1 w - - 0 1',
+        task: { line: ['Ra7+'], hint: "Mets le roi et la dame sur la même ligne que ta tour.", success: "Le roi doit quitter la 7e rangée, puis Txh7 gagne la dame." },
+        text: "<p class='try'>Les Blancs jouent et gagnent la dame noire.</p>" }
+    ]
+  },
+  {
+    id: 'decouverte', group: 'tactiques', level: 'Intermédiaire', title: "Attaque à la découverte",
+    summary: "Une pièce s'écarte et démasque l'attaque d'une autre.",
+    steps: [
+      { title: "L'idée", fen: '4k3/pppq1ppp/8/8/4N3/8/PPP2PPP/4R1K1 w - - 0 1', arrows: [['e1', 'e8']],
+        text: "<p>La tour e1 vise le roi noir, mais son propre cavalier la masque. Si le cavalier bouge, l'échec est <b>découvert</b>, et le cavalier peut en profiter pour attaquer autre chose.</p><p>Si le cavalier donne lui aussi échec, c'est un <b>échec double</b> : seul le roi peut bouger.</p>" },
+      { title: "Exercice", fen: '4k3/pppq1ppp/8/8/4N3/8/PPP2PPP/4R1K1 w - - 0 1',
+        task: { line: ['Nf6+'], hint: "Trouve une case où le cavalier donne échec ET attaque la dame.", success: "Échec double ! Le roi doit bouger, et le cavalier prend la dame d7." },
+        text: "<p class='try'>Les Blancs jouent et gagnent la dame.</p>" }
+    ]
+  }
+];
+
+const GROUPS = [
+  { id: 'bases', name: 'Les bases', desc: 'Règles, déplacements, mat' },
+  { id: 'ouvertures', name: 'Ouvertures', desc: 'Apprends les lignes en les jouant' },
+  { id: 'tactiques', name: 'Tactiques', desc: 'Les motifs qui gagnent du matériel' }
+];
+
+/* La partie de l'Opéra, Paul Morphy, Paris 1858 */
+const OPERA = ['e4','e5','Nf3','d6','d4','Bg4','dxe5','Bxf3','Qxf3','dxe5','Bc4','Nf6','Qb3','Qe7','Nc3','c6','Bg5','b5','Nxb5','cxb5','Bxb5+','Nbd7','O-O-O','Rd8','Rxd7','Rxd7','Rd1','Qe6','Bxd7+','Nxd7','Qb8+','Nxb8','Rd8#'];
+
+const HISTORY = [
+  { year: 'vers 600', era: 'Origines', title: "Le chaturanga en Inde",
+    text: "Le plus ancien ancêtre connu des échecs représente une armée indienne en quatre corps : infanterie, cavalerie, éléphants et chars. On y retrouve déjà le pion, le cavalier et la tour (le char)." },
+  { year: 'VIIe s.', era: 'Origines', title: "Le shatranj perse puis arabe",
+    text: "Le jeu passe en Perse puis dans le monde arabe. L'expression persane « shâh mât » nous a donné « échec et mat ». La dame n'est alors qu'un vizir qui avance d'une seule case en diagonale." },
+  { year: 'vers 1000', era: 'Moyen Âge', title: "Arrivée en Europe",
+    text: "Par l'Espagne musulmane et l'Italie, le jeu gagne l'Europe. Le vizir devient la reine (puis la « dame » en français), l'éléphant devient le fou." },
+  { year: 'vers 1490', era: 'Renaissance', title: "La dame devient toute-puissante",
+    text: "En Espagne, la dame obtient sa marche moderne et le fou sa grande diagonale. Les parties deviennent beaucoup plus rapides : c'est la naissance des échecs modernes et de la théorie des ouvertures." },
+  { year: '1749', era: 'Lumières', title: "Philidor et les pions",
+    text: "Le Français François-André Danican Philidor, aussi compositeur, publie L'Analyse du jeu des échecs. Sa formule reste célèbre : « Les pions sont l'âme des échecs ». À Paris, le Café de la Régence est alors le centre mondial du jeu." },
+  { year: '1851', era: 'Romantisme', title: "Le premier tournoi international",
+    text: "À Londres, Adolf Anderssen remporte le premier grand tournoi international. La même année, il joue « l'Immortelle », où il sacrifie les deux tours et la dame pour mater." },
+  { year: '1858', era: 'Romantisme', title: "Morphy à l'Opéra de Paris",
+    text: "L'Américain Paul Morphy écrase deux amateurs pendant une représentation à l'Opéra. Cette partie, que tu peux revoir sur la page d'accueil, illustre le développement rapide et l'attaque." },
+  { year: '1886', era: 'Ère classique', title: "Steinitz, premier champion du monde",
+    text: "Wilhelm Steinitz bat Johannes Zukertort et devient le premier champion du monde officiel. Il pose les bases du jeu positionnel : accumuler de petits avantages avant d'attaquer." },
+  { year: '1924', era: 'Ère classique', title: "Naissance de la FIDE à Paris",
+    text: "La Fédération internationale des échecs est fondée à Paris. Elle organise aujourd'hui le championnat du monde et gère le classement Elo des joueurs." },
+  { year: '1927', era: 'Ère classique', title: "Vera Menchik, première championne du monde",
+    text: "Le premier championnat du monde féminin est remporté par Vera Menchik. La même année, Alexandre Alekhine, futur citoyen français, détrône Capablanca." },
+  { year: '1972', era: 'Guerre froide', title: "Fischer contre Spassky",
+    text: "À Reykjavik, l'Américain Bobby Fischer bat le Soviétique Boris Spassky en pleine guerre froide. Le « match du siècle » rend les échecs populaires dans le monde entier." },
+  { year: '1985', era: 'Guerre froide', title: "Kasparov, champion à 22 ans",
+    text: "Garry Kasparov bat Anatoly Karpov au terme de matchs marathon. Il restera numéro un mondial pendant une vingtaine d'années." },
+  { year: '1997', era: 'Ère numérique', title: "Deep Blue bat Kasparov",
+    text: "Pour la première fois, un ordinateur bat le champion du monde en match. Aujourd'hui, les moteurs comme Stockfish, celui qui fait tourner l'entraîneur de ce site, sont bien plus forts que tous les humains." },
+  { year: '2005', era: 'Ère numérique', title: "Judit Polgár dans le top 10",
+    text: "La Hongroise Judit Polgár atteint la 8e place du classement mondial mixte, du jamais vu pour une joueuse. Elle a battu plusieurs champions du monde." },
+  { year: '2013', era: 'Ère numérique', title: "L'ère Carlsen",
+    text: "Le Norvégien Magnus Carlsen devient champion du monde et atteint le classement Elo le plus élevé de l'histoire (2882 en 2014)." },
+  { year: '2017', era: 'Ère numérique', title: "AlphaZero apprend seul",
+    text: "Le programme AlphaZero apprend les échecs en jouant uniquement contre lui-même, en quelques heures, et bat Stockfish avec un style d'attaque très humain." },
+  { year: '2020', era: 'Aujourd\'hui', title: "Le boom du Jeu de la dame",
+    text: "La série Le Jeu de la dame et les parties en ligne pendant les confinements amènent des millions de nouveaux joueurs aux échecs." },
+  { year: '2024', era: 'Aujourd\'hui', title: "Gukesh, plus jeune champion",
+    text: "L'Indien Gukesh Dommaraju bat Ding Liren à Singapour et devient, à 18 ans, le plus jeune champion du monde de l'histoire. Le jeu revient en quelque sorte à son pays d'origine." }
+];
+
+const LEVELS = [
+  { name: 'Découverte', skill: 0, depth: 1, time: 80 },
+  { name: 'Débutant', skill: 2, depth: 2, time: 120 },
+  { name: 'Apprenti', skill: 4, depth: 4, time: 200 },
+  { name: 'Club', skill: 7, depth: 6, time: 300 },
+  { name: 'Confirmé', skill: 10, depth: 8, time: 500 },
+  { name: 'Fort', skill: 14, depth: 10, time: 700 },
+  { name: 'Expert', skill: 17, depth: 13, time: 1000 },
+  { name: 'Maître', skill: 20, depth: 16, time: 1500 }
+];
+
+/* ====================== Utilitaires ====================== */
+const $ = (s, r = document) => r.querySelector(s);
+const h = (tag, attrs = {}, html) => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (html != null) e.innerHTML = html; return e; };
+const FILES = 'abcdefgh';
+const GLYPH = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟︎' };
+const VALUE = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 100 };
+const NAME = { p: 'pion', n: 'cavalier', b: 'fou', r: 'tour', q: 'dame', k: 'roi' };
+const ART = { p: 'le', n: 'le', b: 'le', r: 'la', q: 'la', k: 'le' };
+const UNA = { p: 'un', n: 'un', b: 'un', r: 'une', q: 'la', k: 'le' };
+const FR = { K: 'R', Q: 'D', R: 'T', B: 'F', N: 'C' };
+const fr = san => san ? san.replace(/[KQRBN]/g, c => FR[c]) : '';
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('pionpasse:' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('pionpasse:' + k, JSON.stringify(v)); } catch (e) {} }
+};
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const newGame = fen => (fen && fen !== 'start') ? new Chess(fen) : new Chess();
+const uciOf = m => m.from + m.to + (m.promotion || '');
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+/* Même position, mais au tour de l'autre camp (pour lister les attaques d'une pièce). */
+function flipTurn(fen) { const p = fen.split(' '); p[1] = p[1] === 'w' ? 'b' : 'w'; p[3] = '-'; return p.join(' '); }
+
+/* ====================== Échiquier ====================== */
+class Board {
+  constructor(el, opts = {}) {
+    this.el = el; this.opts = opts; this.orientation = opts.orientation || 'w';
+    this.game = null; this.selected = null; this.lastMove = null; this.marks = []; this.arrowList = [];
+    this.board = h('div', { class: 'board', role: 'grid', 'aria-label': 'Échiquier' });
+    this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    this.svg.setAttribute('class', 'arrows'); this.svg.setAttribute('viewBox', '0 0 8 8');
+    el.appendChild(this.board);
+    this.board.addEventListener('pointerdown', e => this.down(e));
+  }
+  canInteract() { return this.opts.interactive ? this.opts.interactive() : false; }
+  set(game, lastMove) { this.game = game; this.lastMove = lastMove || null; this.selected = null; this.render(); }
+  flip(color) { this.orientation = color; this.render(); }
+  squareAt(i) { const r = Math.floor(i / 8), c = i % 8; return this.orientation === 'w' ? FILES[c] + (8 - r) : FILES[7 - c] + (r + 1); }
+  xy(sq) { const f = FILES.indexOf(sq[0]), r = +sq[1]; return this.orientation === 'w' ? [f + .5, 8 - r + .5] : [7 - f + .5, r - 1 + .5]; }
+  legalFrom(sq) {
+    if (!this.game) return [];
+    const p = this.game.get(sq); if (!p) return [];
+    let g = this.game;
+    if (this.opts.sandbox && p.color !== g.turn()) g = new Chess(flipTurn(g.fen()));
+    const ms = g.moves({ square: sq, verbose: true });
+    return this.opts.sandbox ? ms.filter(m => m.captured !== 'k') : ms;
+  }
+  render() {
+    const b = this.board; b.textContent = '';
+    const dests = this.selected ? this.legalFrom(this.selected) : [];
+    const inCheck = this.game && this.game.in_check() ? this.kingSquare(this.game.turn()) : null;
+    for (let i = 0; i < 64; i++) {
+      const sq = this.squareAt(i), f = FILES.indexOf(sq[0]), r = +sq[1];
+      const d = h('div', { class: 'sq ' + ((f + r) % 2 ? 'l' : 'd'), 'data-sq': sq });
+      if (this.lastMove && (sq === this.lastMove.from || sq === this.lastMove.to)) d.classList.add('last');
+      if (this.marks.includes(sq)) d.classList.add('hl');
+      if (sq === this.selected) d.classList.add('sel');
+      if (sq === inCheck) d.classList.add('check');
+      const dm = dests.find(m => m.to === sq);
+      if (dm) { d.classList.add('dest'); if (this.game.get(sq) || dm.flags.includes('e')) d.classList.add('cap'); }
+      const row = Math.floor(i / 8), col = i % 8;
+      if (row === 7) d.appendChild(h('span', { class: 'co f' }, sq[0]));
+      if (col === 0) d.appendChild(h('span', { class: 'co r' }, sq[1]));
+      const p = this.game && this.game.get(sq);
+      if (p) d.appendChild(h('span', { class: 'pc ' + p.color }, GLYPH[p.type]));
+      b.appendChild(d);
+    }
+    b.classList.toggle('locked', !this.canInteract());
+    this.drawArrows(); b.appendChild(this.svg);
+  }
+  kingSquare(color) { for (let i = 0; i < 64; i++) { const sq = FILES[i % 8] + (Math.floor(i / 8) + 1); const p = this.game.get(sq); if (p && p.type === 'k' && p.color === color) return sq; } }
+  highlight(squares) { this.marks = squares || []; this.render(); }
+  arrows(list) { this.arrowList = list || []; this.drawArrows(); }
+  drawArrows() {
+    const NS = 'http://www.w3.org/2000/svg'; const s = this.svg; s.textContent = '';
+    const defs = document.createElementNS(NS, 'defs');
+    ['a', 'bad'].forEach(id => {
+      const m = document.createElementNS(NS, 'marker');
+      m.setAttribute('id', 'ah-' + id + this.uid()); m.setAttribute('viewBox', '0 0 10 10'); m.setAttribute('refX', '5'); m.setAttribute('refY', '5');
+      m.setAttribute('markerWidth', '3'); m.setAttribute('markerHeight', '3'); m.setAttribute('orient', 'auto');
+      const p = document.createElementNS(NS, 'path'); p.setAttribute('d', 'M0,0 L10,5 L0,10 z'); p.setAttribute('fill', id === 'a' ? 'var(--arrow)' : 'var(--arrow-bad)');
+      m.appendChild(p); defs.appendChild(m);
+    });
+    s.appendChild(defs);
+    for (const [from, to, kind] of this.arrowList) {
+      const [x1, y1] = this.xy(from), [x2, y2] = this.xy(to);
+      const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy), k = (len - .38) / len;
+      const l = document.createElementNS(NS, 'line');
+      l.setAttribute('x1', x1); l.setAttribute('y1', y1); l.setAttribute('x2', x1 + dx * k); l.setAttribute('y2', y1 + dy * k);
+      l.setAttribute('stroke', kind === 'bad' ? 'var(--arrow-bad)' : 'var(--arrow)'); l.setAttribute('stroke-width', '.17'); l.setAttribute('stroke-linecap', 'round');
+      l.setAttribute('marker-end', `url(#ah-${kind === 'bad' ? 'bad' : 'a'}${this.uid()})`);
+      s.appendChild(l);
+    }
+  }
+  uid() { if (!this._uid) this._uid = Math.random().toString(36).slice(2, 7); return this._uid; }
+
+  /* --- interaction : clic-clic ou glisser-déposer --- */
+  sqFromPoint(x, y) { const el = document.elementFromPoint(x, y); const s = el && el.closest('.sq'); return s && this.board.contains(s) ? s.dataset.sq : null; }
+  ownPiece(sq) {
+    const p = this.game && this.game.get(sq); if (!p) return false;
+    if (this.opts.sandbox) return p.color === 'w';
+    return p.color === this.game.turn() && (!this.opts.color || this.opts.color() === p.color);
+  }
+  down(e) {
+    if (!this.canInteract() || e.button > 0) return;
+    const sq = this.sqFromPoint(e.clientX, e.clientY); if (!sq) return;
+    if (this.selected && sq !== this.selected && this.legalFrom(this.selected).some(m => m.to === sq)) { this.tryMove(this.selected, sq); return; }
+    if (!this.ownPiece(sq)) { if (this.selected) { this.selected = null; this.render(); } return; }
+    e.preventDefault();
+    const wasSelected = this.selected === sq;
+    this.selected = sq; this.render();
+    const pcEl = this.board.querySelector(`[data-sq="${sq}"] .pc`);
+    const size = this.board.getBoundingClientRect().width / 8;
+    const ghost = h('div', { class: 'ghost pc ' + this.game.get(sq).color }, pcEl.textContent);
+    ghost.style.fontSize = (size * .83) + 'px';
+    let moved = false;
+    const move = ev => {
+      if (!moved && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 4) return;
+      if (!moved) { moved = true; document.body.appendChild(ghost); const pe = this.board.querySelector(`[data-sq="${sq}"] .pc`); pe && pe.classList.add('dragging'); }
+      ghost.style.left = ev.clientX + 'px'; ghost.style.top = ev.clientY + 'px';
+    };
+    const up = ev => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+      ghost.remove();
+      if (moved) {
+        const to = this.sqFromPoint(ev.clientX, ev.clientY);
+        if (to && to !== sq && this.legalFrom(sq).some(m => m.to === to)) { this.tryMove(sq, to); return; }
+        this.render();
+      } else if (wasSelected) { this.selected = null; this.render(); }
+    };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+  }
+  tryMove(from, to) {
+    this.selected = null;
+    const cand = this.legalFrom(from).find(m => m.to === to);
+    const promotion = cand && cand.flags.includes('p') ? 'q' : undefined;
+    if (this.opts.onMove) this.opts.onMove({ from, to, promotion });
+    this.render();
+  }
+}
+
+/* ====================== Moteur (Stockfish dans un Web Worker) ====================== */
+const Engine = {
+  worker: null, fallback: false, queue: [], current: null, readyP: null,
+  start() {
+    if (this.readyP) return this.readyP;
+    this.readyP = new Promise(res => {
+      let done = false;
+      const finish = ok => { if (done) return; done = true; if (!ok) { this.fallback = true; try { this.worker && this.worker.terminate(); } catch (e) {} } res(ok); this.pump(); };
+      try { this.worker = new Worker('stockfish.js'); } catch (e) { finish(false); return; }
+      const timer = setTimeout(() => finish(false), 20000);
+      this.worker.onerror = () => { clearTimeout(timer); finish(false); };
+      this.worker.onmessage = ev => {
+        const line = String(ev.data);
+        if (line === 'uciok') { clearTimeout(timer); finish(true); return; }
+        this.onLine(line);
+      };
+      this.worker.postMessage('uci');
+    });
+    return this.readyP;
+  },
+  analyse(fen, o = {}) { return new Promise(resolve => { this.queue.push({ fen, o, resolve, info: { score: null, pv: [] } }); this.start(); if (this.readyP) this.readyP.then(() => this.pump()); }); },
+  pump() {
+    if (this.current || !this.queue.length || !this.readyP) return;
+    if (!this.fallback && !this.worker) return;
+    const job = this.queue.shift(); this.current = job;
+    if (this.fallback) { setTimeout(() => { const r = fallbackSearch(job.fen, job.o); this.current = null; job.resolve(r); this.pump(); }, 20); return; }
+    const w = this.worker;
+    w.postMessage('setoption name Skill Level value ' + (job.o.skill == null ? 20 : job.o.skill));
+    w.postMessage('position fen ' + job.fen);
+    w.postMessage('go depth ' + (job.o.depth || 12) + (job.o.time ? ' movetime ' + job.o.time : ''));
+  },
+  onLine(line) {
+    const job = this.current; if (!job) return;
+    if (line.startsWith('info') && line.includes(' pv ') && !/bound/.test(line)) {
+      const m = line.match(/score (cp|mate) (-?\d+)/), d = line.match(/ depth (\d+)/);
+      const pv = line.split(' pv ')[1].trim().split(' '), depth = d ? +d[1] : 0;
+      // Une recherche coupée par le temps renvoie souvent une ligne tronquée : on garde la plus profonde.
+      if (depth < (job.info.depth || 0) || (depth === job.info.depth && pv.length < job.info.pv.length)) return;
+      // Stockfish 10 exprime ses évaluations sur une échelle plus large que les moteurs récents : on la ramène en pions.
+      if (m) job.info.score = m[1] === 'cp' ? { cp: Math.round(+m[2] * 0.6) } : { mate: +m[2] };
+      job.info.pv = pv; job.info.depth = depth;
+    } else if (line.startsWith('bestmove')) {
+      const best = line.split(' ')[1];
+      this.current = null;
+      job.resolve({ best: best === '(none)' ? null : best, score: job.info.score || { cp: 0 }, pv: job.info.pv.length ? job.info.pv : [best], depth: job.info.depth });
+      this.pump();
+    }
+  }
+};
+
+/* Petit moteur de secours (si Stockfish ne peut pas démarrer) : minimax alpha-bêta sur le matériel. */
+function fallbackSearch(fen, o) {
+  const g = new Chess(fen);
+  const evalPos = () => {
+    let s = 0;
+    for (let i = 0; i < 64; i++) {
+      const sq = FILES[i % 8] + (Math.floor(i / 8) + 1), p = g.get(sq); if (!p) continue;
+      const f = i % 8, r = Math.floor(i / 8), center = 3.5 - Math.max(Math.abs(f - 3.5), Math.abs(r - 3.5));
+      let v = VALUE[p.type] * 100 + (p.type === 'k' ? 0 : center * (p.type === 'p' ? 4 : 6));
+      if (p.type === 'p') v += (p.color === 'w' ? r : 7 - r) * 5;
+      s += p.color === 'w' ? v : -v;
+    }
+    return g.turn() === 'w' ? s : -s;
+  };
+  const order = ms => ms.sort((a, b) => (b.captured ? VALUE[b.captured] * 10 - VALUE[b.piece] : -100) - (a.captured ? VALUE[a.captured] * 10 - VALUE[a.piece] : -100));
+  const search = (depth, alpha, beta, ply) => {
+    if (g.in_checkmate()) return -100000 + ply;
+    if (g.in_draw() || g.in_stalemate()) return 0;
+    if (depth === 0) return evalPos();
+    let best = -Infinity;
+    for (const m of order(g.moves({ verbose: true }))) {
+      g.move(m); const v = -search(depth - 1, -beta, -alpha, ply + 1); g.undo();
+      if (v > best) best = v; if (v > alpha) alpha = v; if (alpha >= beta) break;
+    }
+    return best;
+  };
+  const depth = Math.min(3, Math.max(1, o.depth || 2));
+  let scored = [];
+  for (const m of order(g.moves({ verbose: true }))) { g.move(m); scored.push([m, -search(depth - 1, -Infinity, Infinity, 1)]); g.undo(); }
+  if (!scored.length) return { best: null, score: { cp: 0 }, pv: [] };
+  scored.sort((a, b) => b[1] - a[1]);
+  let pick = scored[0];
+  if (o.skill != null && o.skill < 20) { const n = Math.max(1, Math.round((20 - o.skill) / 4)); pick = scored[Math.floor(Math.random() * Math.min(n, scored.length))]; }
+  const top = scored[0][1];
+  const score = Math.abs(top) > 90000 ? { mate: Math.sign(top) * Math.ceil((100000 - Math.abs(top)) / 2) } : { cp: top };
+  return { best: uciOf(pick[0]), score, pv: [uciOf(pick[0])] };
+}
+
+/* Évaluations : centipions du point de vue du camp au trait -> pourcentage de gain */
+const cpOf = s => s.mate != null ? (s.mate > 0 ? 100000 - s.mate * 100 : -100000 - s.mate * 100) : s.cp;
+const winPct = cp => Math.abs(cp) > 50000 ? (cp > 0 ? 100 : 0) : 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * Math.max(-1500, Math.min(1500, cp)))) - 1);
+const neg = s => s.mate != null ? { mate: -s.mate } : { cp: -s.cp };
+function fmtEval(s) { // s du point de vue des Blancs
+  if (s.mate != null) return (s.mate > 0 ? '+' : '−') + 'M' + Math.abs(s.mate);
+  const v = s.cp / 100; return (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1);
+}
+
+/* ====================== Explications en français ====================== */
+function pvToSan(fen, pv, n = 5) {
+  const g = new Chess(fen), out = [];
+  for (const u of pv.slice(0, n)) { const m = g.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] || 'q' }); if (!m) break; out.push(m); }
+  return out;
+}
+function fmtLine(fen, moves) {
+  let n = +fen.split(' ')[5], white = fen.split(' ')[1] === 'w', parts = [];
+  moves.forEach((m, i) => { if (white) parts.push(n + '. ' + fr(m.san)); else parts.push((i === 0 ? n + '... ' : '') + fr(m.san)); if (!white) n++; white = !white; });
+  return parts.join(' ');
+}
+/* Pièces adverses attaquées par la pièce qui vient d'arriver en `sq`. */
+function threatsFrom(g, sq) {
+  const t = new Chess(flipTurn(g.fen()));
+  const attacker = t.get(sq); if (!attacker) return [];
+  return t.moves({ square: sq, verbose: true }).filter(m => m.captured).map(m => {
+    t.move(m); const defended = t.moves({ verbose: true }).some(r => r.to === m.to); t.undo();
+    return { sq: m.to, type: m.captured, defended, gain: !defended || VALUE[m.captured] > VALUE[attacker.type] };
+  }).filter(x => x.type !== 'k' && x.gain).sort((a, b) => VALUE[b.type] - VALUE[a.type]);
+}
+function explainMove(fen, uci) {
+  const g = new Chess(fen);
+  const m = g.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] || 'q' });
+  if (!m) return { san: uci, text: '' };
+  const who = ART[m.piece] + ' ' + NAME[m.piece];
+  let s;
+  if (m.flags.includes('k')) s = "petit roque : le roi se met à l'abri et la tour entre dans le jeu";
+  else if (m.flags.includes('q')) s = "grand roque : le roi s'abrite et la tour arrive au centre";
+  else if (m.flags.includes('e')) s = "le pion prend en passant";
+  else if (m.captured) s = `${who} prend ${ART[m.captured]} ${NAME[m.captured]} en ${m.to}`;
+  else if (m.flags.includes('p')) s = "le pion avance et devient une dame";
+  else s = `${who} va en ${m.to}`;
+  if (m.captured && m.flags.includes('p')) s += ' et devient une dame';
+  const extra = [];
+  if (g.in_checkmate()) extra.push('échec et mat');
+  else {
+    if (g.in_check()) extra.push('avec échec');
+    const th = threatsFrom(g, m.to);
+    if (th.length && !m.flags.includes('k') && !m.flags.includes('q')) {
+      const names = th.slice(0, 2).map(x => `${ART[x.type]} ${NAME[x.type]} ${x.defended ? '' : 'non protégé' + (x.type === 'r' || x.type === 'q' ? 'e' : '') + ' '}en ${x.sq}`.replace(/\s+/g, ' '));
+      extra.push((th.length > 1 ? 'attaque à la fois ' : 'menace ') + names.join(' et '));
+    }
+    const moveNo = +fen.split(' ')[5];
+    if (!m.captured && moveNo <= 10 && 'nb'.includes(m.piece) && (m.from[1] === '1' || m.from[1] === '8')) extra.push('développe une pièce');
+    if (!m.captured && ['d4', 'e4', 'd5', 'e5'].includes(m.to) && moveNo <= 12) extra.push('occupe le centre');
+  }
+  let text = s + (extra.length ? ', ' + extra.join(', ') : '');
+  const tactical = !!m.captured || g.in_check() || extra.some(x => /attaque|menace/.test(x));
+  return { san: m.san, text: cap(text) + '.', move: m, tactical };
+}
+
+/* ====================== Navigation ====================== */
+const views = ['accueil', 'lecons', 'entraineur', 'jouer', 'histoire'];
+const onShow = {};
+function route() {
+  const raw = (location.hash || '#accueil').slice(1);
+  const [v, arg] = raw.split('/');
+  const view = views.includes(v) ? v : 'accueil';
+  document.querySelectorAll('[data-view]').forEach(s => s.hidden = s.dataset.view !== view);
+  document.querySelectorAll('nav.tabs a').forEach(a => a.setAttribute('aria-current', a.getAttribute('href') === '#' + view ? 'page' : 'false'));
+  if (onShow[view]) onShow[view](arg);
+}
+window.addEventListener('hashchange', () => { route(); window.scrollTo({ top: 0 }); });
+
+/* ====================== Accueil : la partie de l'Opéra ====================== */
+(function hero() {
+  const b = new Board($('#hero-board'));
+  let i = 0, g = new Chess(); b.set(g);
+  const label = $('#hero-move');
+  const tick = () => {
+    if ($('[data-view="accueil"]').hidden) return;
+    if (i >= OPERA.length) { i = 0; g = new Chess(); b.set(g); label.textContent = 'Position de départ'; return; }
+    const m = g.move(OPERA[i]); const no = Math.floor(i / 2) + 1;
+    label.textContent = (i % 2 === 0 ? no + '. ' : no + '... ') + fr(m.san) + (m.san.endsWith('#') ? '  Échec et mat !' : '');
+    b.set(g, m); i++;
+  };
+  const reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduced) { OPERA.forEach(s => g.move(s)); b.set(g); label.textContent = '17. Td8# · position finale'; }
+  else setInterval(tick, 1400);
+})();
+
+/* ====================== Leçons ====================== */
+const Lessons = (function () {
+  const done = new Set(store.get('done', []));
+  let lesson = null, stepIdx = 0, game = null, demoPly = 0, task = null, seen = new Set();
+  const panel = $('#lesson-panel');
+  const board = new Board($('#lesson-board'), {
+    interactive: () => !!(lesson && (curStep().sandbox || (task && !task.solved && !task.busy))),
+    color: () => task ? task.side : 'w',
+    get sandbox() { return lesson && curStep() && curStep().sandbox; },
+    onMove: mv => onUserMove(mv)
+  });
+
+  /* Les leçons d'ouverture deviennent : présentation, démonstration commentée, entraînement de mémoire. */
+  function stepsOf(l) {
+    if (l.steps) return l.steps;
+    const sideName = l.side === 'w' ? 'les Blancs' : 'les Noirs';
+    const finalG = new Chess(); l.line.forEach(([s]) => finalG.move(s));
+    return [
+      { title: 'Les coups commentés', fen: 'start', moves: l.line, orient: l.side,
+        text: `<p>${l.summary}</p><p>Avance avec les flèches et lis l'idée de chaque coup. Tu joueras ${sideName}.</p>` },
+      { title: 'Rejoue-la de mémoire', fen: 'start', orient: l.side, task: { line: l.line.map(x => x[0]), side: l.side, hint: null, success: "Ligne complète ! Tu connais les premiers coups de cette ouverture." },
+        text: `<p>À toi de jouer les coups des ${l.side === 'w' ? 'Blancs' : 'Noirs'}. L'ordinateur répond comme dans la ligne étudiée. En cas d'erreur, tu reçois un indice.</p>` },
+      { title: 'La position obtenue', fen: finalG.fen(), orient: l.side,
+        text: `<p>Voici la position atteinte après ${Math.ceil(l.line.length / 2)} coups. Chaque camp a développé ses pièces selon les principes : centre, développement, sécurité du roi.</p><p>Pour aller plus loin, joue cette ouverture contre l'IA dans le mode <a href="#entraineur">Entraîneur</a> : il te dira si tes coups suivants sont bons.</p>` }
+    ];
+  }
+  const curStep = () => lesson && stepsOf(lesson)[stepIdx];
+
+  function renderCatalog() {
+    const c = $('#catalog'); c.textContent = '';
+    for (const gr of GROUPS) {
+      const box = h('div'); box.appendChild(h('h3', {}, gr.name));
+      const ul = h('ul');
+      LESSONS.filter(l => l.group === gr.id).forEach(l => {
+        const li = h('li', { class: done.has(l.id) ? 'done' : '' });
+        const b = h('button', { type: 'button', 'aria-current': lesson && lesson.id === l.id ? 'true' : 'false' },
+          `<span class="st">${done.has(l.id) ? '✓' : ''}</span><span class="t">${l.title}<span class="lv">${l.level}${l.side ? ' · avec les ' + (l.side === 'w' ? 'Blancs' : 'Noirs') : ''}</span></span>`);
+        b.onclick = () => { location.hash = 'lecons/' + l.id; };
+        li.appendChild(b); ul.appendChild(li);
+      });
+      box.appendChild(ul); c.appendChild(box);
+    }
+  }
+
+  function open(id) {
+    const l = LESSONS.find(x => x.id === id) || LESSONS[0];
+    if (lesson && lesson.id === l.id) return;
+    lesson = l; stepIdx = 0; seen = new Set(); renderCatalog(); loadStep();
+  }
+
+  function loadStep() {
+    const st = curStep(); seen.add(stepIdx);
+    game = newGame(st.fen); demoPly = 0;
+    task = st.task ? { ...st.task, side: st.task.side || game.turn(), idx: 0, solved: false, busy: false, fails: 0 } : null;
+    board.flip(st.orient || (task ? task.side : 'w'));
+    board.marks = st.hl || []; board.arrowList = st.arrows || [];
+    board.set(game);
+    renderPanel();
+    if (task) autoReply();
+  }
+
+  function renderPanel(fb) {
+    const st = curStep(), steps = stepsOf(lesson);
+    panel.innerHTML = '';
+    panel.appendChild(h('div', { class: 'eyebrow' }, `${lesson.level} · étape ${stepIdx + 1} / ${steps.length}`));
+    panel.appendChild(h('h2', {}, lesson.title));
+    const dots = h('div', { class: 'steps', 'aria-hidden': 'true' });
+    steps.forEach((_, i) => dots.appendChild(h('i', { class: i === stepIdx ? 'on' : seen.has(i) ? 'seen' : '' })));
+    panel.appendChild(dots);
+    panel.appendChild(h('h3', {}, st.title));
+    panel.appendChild(h('div', { class: 'body' }, st.text || ''));
+    if (st.moves) {
+      const cmt = h('div', { class: 'movecomment', 'aria-live': 'polite' });
+      const cur = demoPly > 0 ? st.moves[demoPly - 1] : null;
+      cmt.innerHTML = cur ? `<span class="mono">${moveLabel(demoPly - 1, cur[0])}</span>${cur[1] || ''}` : '<span style="color:var(--muted)">Position de départ. Clique sur ▶ pour jouer le premier coup.</span>';
+      panel.appendChild(cmt);
+      const r = h('div', { class: 'row' });
+      const mk = (lbl, fn, dis, aria) => { const b = h('button', { class: 'btn icon', type: 'button', 'aria-label': aria }, lbl); b.disabled = dis; b.onclick = fn; r.appendChild(b); };
+      mk('⏮', () => demoTo(0), demoPly === 0, 'Début');
+      mk('◀', () => demoTo(demoPly - 1), demoPly === 0, 'Coup précédent');
+      mk('▶', () => demoTo(demoPly + 1), demoPly >= st.moves.length, 'Coup suivant');
+      mk('⏭', () => demoTo(st.moves.length), demoPly >= st.moves.length, 'Fin');
+      r.appendChild(h('span', { class: 'mono', style: 'color:var(--muted);margin-left:6px' }, `${demoPly} / ${st.moves.length}`));
+      panel.appendChild(r);
+    }
+    if (task) {
+      const f = h('div', { class: 'feedback', 'aria-live': 'polite' });
+      if (fb) { f.className = 'feedback ' + fb.kind; f.innerHTML = fb.text; }
+      else if (task.line.length > 1) { f.className = 'feedback info'; f.textContent = `Coup ${Math.min(task.line.length, task.idx + 1)} sur ${task.line.length} de la ligne.`; }
+      panel.appendChild(f);
+      if (!task.solved) {
+        const r = h('div', { class: 'row' });
+        const hb = h('button', { class: 'btn', type: 'button' }, 'Indice'); hb.onclick = () => giveHint(); r.appendChild(hb);
+        const rb = h('button', { class: 'btn', type: 'button' }, 'Recommencer'); rb.onclick = () => loadStep(); r.appendChild(rb);
+        panel.appendChild(r);
+      }
+    }
+    const nav = h('div', { class: 'nav-steps' });
+    const prev = h('button', { class: 'btn', type: 'button' }, '← Précédent'); prev.disabled = stepIdx === 0; prev.onclick = () => { stepIdx--; loadStep(); };
+    const last = stepIdx === steps.length - 1;
+    const next = h('button', { class: 'btn primary', type: 'button' }, last ? (nextLesson() ? 'Leçon suivante →' : 'Terminer ✓') : 'Suivant →');
+    next.onclick = () => {
+      if (!last) { stepIdx++; loadStep(); return; }
+      done.add(lesson.id); store.set('done', [...done]);
+      const n = nextLesson(); if (n) location.hash = 'lecons/' + n.id; else { renderCatalog(); renderPanel({ kind: 'ok', text: 'Bravo, tu as terminé toutes les leçons ! Passe au mode Entraîneur.' }); }
+    };
+    nav.appendChild(prev); nav.appendChild(next); panel.appendChild(nav);
+  }
+  const nextLesson = () => LESSONS[LESSONS.indexOf(lesson) + 1];
+  function moveLabel(ply, san) { const no = Math.floor(ply / 2) + 1; return (ply % 2 === 0 ? no + '. ' : no + '... ') + fr(san); }
+
+  function demoTo(n) {
+    const st = curStep(); n = Math.max(0, Math.min(st.moves.length, n));
+    game = newGame(st.fen); let last = null;
+    for (let i = 0; i < n; i++) last = game.move(st.moves[i][0]);
+    demoPly = n; board.arrowList = []; board.marks = []; board.set(game, last); renderPanel();
+  }
+
+  function giveHint() {
+    if (!task || task.solved) return;
+    const g = new Chess(game.fen()); const m = g.move(task.line[task.idx]);
+    task.hints = (task.hints || 0) + 1;
+    if (task.hints === 1) { renderPanel({ kind: 'info', text: task.hint || `Indice : bouge ${ART[m.piece]} ${NAME[m.piece]} en surbrillance.` }); board.highlight([m.from]); }
+    else { board.marks = [m.from]; board.arrows([[m.from, m.to]]); board.render(); renderPanel({ kind: 'info', text: `Le coup attendu est <b class="mono">${fr(m.san)}</b>.` }); }
+  }
+
+  async function autoReply() {
+    while (task && !task.solved && task.idx < task.line.length && game.turn() !== task.side) {
+      task.busy = true; board.render();
+      await sleep(550);
+      const m = game.move(task.line[task.idx]); task.idx++;
+      board.marks = []; board.arrowList = []; board.set(game, m);
+    }
+    if (task) { task.busy = false; board.render(); }
+  }
+
+  function onUserMove(mv) {
+    const st = curStep();
+    if (st.sandbox) {
+      const g = new Chess(game.turn() === 'w' ? game.fen() : flipTurn(game.fen()));
+      const m = g.move(mv); if (!m) return;
+      game = new Chess(g.turn() === 'w' ? g.fen() : flipTurn(g.fen()));
+      board.marks = []; board.arrowList = []; board.set(game, m);
+      return;
+    }
+    if (!task || task.solved) return;
+    const expected = task.line[task.idx];
+    const m = game.move(mv); if (!m) return;
+    const ok = m.san === expected || (expected.endsWith('#') && game.in_checkmate());
+    board.arrowList = []; board.marks = []; board.set(game, m);
+    if (!ok) {
+      task.fails++; task.busy = true; board.render();
+      renderPanel({ kind: 'ko', text: `${fr(m.san)} n'est pas le bon coup. ${task.hint && task.fails === 1 ? task.hint : 'Réessaie, ou demande un indice.'}` });
+      setTimeout(() => { game.undo(); task.busy = false; const h2 = game.history({ verbose: true }); board.set(game, h2[h2.length - 1]); }, 800);
+      return;
+    }
+    task.idx++;
+    if (task.idx >= task.line.length) {
+      task.solved = true; board.render();
+      renderPanel({ kind: 'ok', text: (task.success || 'Bien joué !') });
+      return;
+    }
+    renderPanel({ kind: 'ok', text: `Oui, ${fr(m.san)} !` });
+    autoReply().then(() => { if (task && !task.solved) renderPanel(); });
+  }
+
+  onShow.lecons = arg => { renderCatalog(); open(arg || (lesson ? lesson.id : LESSONS[0].id)); };
+  return { open };
+})();
+
+/* ====================== Arène : partie libre et entraîneur ====================== */
+/* ====================== Voix de l'entraîneuse (synthèse vocale du navigateur) ====================== */
+const Voice = {
+  on: store.get('voice', true), voice: null,
+  supported: typeof window.speechSynthesis !== 'undefined' && typeof SpeechSynthesisUtterance !== 'undefined',
+  FEMALE: /(am[ée]lie|audrey|aur[ée]lie|marie|julie|c[ée]line|denise|hortense|virginie|[ée]lo[iï]se|vivienne|brigitte|charlotte|chantal|sylvie|sandrine|caroline|claire|l[ée]a|juliette|female|femme|google fran)/i,
+  MALE: /(thomas|paul|henri|nicolas|daniel|claude|jacques|antoine|guillaume|mathieu|olivier|fabrice|jean|male|homme)/i,
+  /* Les voix « neuronales » (Natural, Online, Premium, Enhanced, Google) sonnent beaucoup moins robotiques : on les place en tête. */
+  NATURAL: /(natural|neural|online|premium|enhanced|am[ée]lior|google)/i,
+  score(v) { return (this.NATURAL.test(v.name) ? 10 : 0) + (this.FEMALE.test(v.name) ? 4 : 0) - (this.MALE.test(v.name.replace(/female/i, '')) ? 5 : 0) + (/fr[-_]FR/i.test(v.lang) ? 1 : 0); },
+  list() { if (!this.supported) return []; return speechSynthesis.getVoices().filter(v => /^fr/i.test(v.lang)).sort((a, b) => this.score(b) - this.score(a)); },
+  pick() {
+    const all = this.list(), chosen = store.get('voiceName', null);
+    this.voice = all.find(v => v.name === chosen) || all[0] || null;
+    this.listeners.forEach(f => f());
+    return this.voice;
+  },
+  listeners: [],
+  choose(name) { store.set('voiceName', name); this.voice = this.list().find(v => v.name === name) || null; },
+  isNatural(v) { return !!v && this.NATURAL.test(v.name); },
+  say(text) {
+    if (!this.on || !this.supported || !text) return;
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' '));
+      const v = this.voice || this.pick();
+      if (v) u.voice = v;
+      u.lang = v ? v.lang : 'fr-FR';
+      // Sans voix féminine identifiée, on éclaircit légèrement le timbre.
+      u.pitch = v && (this.FEMALE.test(v.name) || this.isNatural(v)) ? 1 : 1.15;
+      u.rate = 1;
+      speechSynthesis.speak(u);
+    } catch (e) {}
+  },
+  stop() { try { this.supported && speechSynthesis.cancel(); } catch (e) {} },
+  toggle() { this.on = !this.on; store.set('voice', this.on); if (!this.on) this.stop(); else this.say("Je suis ton entraîneuse. Je commenterai chacun de tes coups."); }
+};
+if (Voice.supported) { Voice.pick(); try { speechSynthesis.addEventListener('voiceschanged', () => Voice.pick()); } catch (e) {} }
+/* Coup en notation -> phrase à prononcer : « Cxe5+ » devient « cavalier prend e5, échec ». */
+function sayMove(san) {
+  if (/^O-O-O/.test(san)) return 'grand roque' + (san.includes('#') ? ', échec et mat' : san.includes('+') ? ', échec' : '');
+  if (/^O-O/.test(san)) return 'petit roque' + (san.includes('#') ? ', échec et mat' : san.includes('+') ? ', échec' : '');
+  const m = san.match(/^([KQRBN])?([a-h]?[1-8]?)(x?)([a-h][1-8])(=([QRBN]))?([+#])?/);
+  if (!m) return san;
+  let t = m[1] ? NAME[m[1].toLowerCase()] + (m[2] ? ' ' + m[2] : '') + (m[3] ? ' prend ' : ' ') + m[4]
+    : (m[3] ? 'pion prend ' : '') + m[4];
+  if (m[6]) t += ', promotion en ' + NAME[m[6].toLowerCase()];
+  if (m[7] === '#') t += ', échec et mat'; else if (m[7] === '+') t += ', échec';
+  return t;
+}
+
+const VERDICTS = {
+  best: { label: 'Meilleur coup', color: 'var(--v-best)', text: "C'est exactement le coup de Stockfish." },
+  good: { label: 'Bon coup', color: 'var(--v-good)', text: 'Coup solide, presque aussi fort que le meilleur.' },
+  inacc: { label: 'Imprécision', color: 'var(--v-inacc)', text: 'Pas grave, mais il y avait mieux.' },
+  mist: { label: 'Erreur', color: 'var(--v-mist)', text: 'Ce coup abîme nettement ta position.' },
+  blun: { label: 'Gaffe', color: 'var(--v-blun)', text: 'Ce coup perd du matériel ou change le sort de la partie.' }
+};
+function classify(lossPct, isBest) {
+  if (isBest || lossPct < 1) return 'best';
+  if (lossPct < 6) return 'good';
+  if (lossPct < 12) return 'inacc';
+  if (lossPct < 22) return 'mist';
+  return 'blun';
+}
+
+class Arena {
+  constructor(root, coach) {
+    this.root = root; this.coach = coach; this.key = coach ? 'coach' : 'play';
+    const saved = store.get(this.key, {});
+    this.level = saved.level != null ? saved.level : (coach ? 2 : 1);
+    this.userColor = saved.color || 'w';
+    this.gen = 0; this.tally = { best: 0, good: 0, inacc: 0, mist: 0, blun: 0 };
+    this.build();
+    this.newGame();
+  }
+  build() {
+    const r = this.root;
+    r.innerHTML = `
+      <div class="boardcol">
+        <div class="evalbar" ${this.coach ? '' : 'hidden'} aria-hidden="true"><div class="w"></div><span class="lbl"></span></div>
+        <div class="board-wrap"></div>
+      </div>
+      <div class="side">
+        <div class="panel controls">
+          <label for="${this.key}-level">Niveau de l'IA
+            <select id="${this.key}-level">${LEVELS.map((l, i) => `<option value="${i}">${i + 1} · ${l.name}</option>`).join('')}</select>
+          </label>
+          <div class="row">
+            <div class="seg" role="group" aria-label="Couleur">
+              <button type="button" data-c="w">Blancs</button><button type="button" data-c="b">Noirs</button>
+            </div>
+            <button class="btn primary" type="button" data-a="new">Nouvelle partie</button>
+          </div>
+          <div class="row">
+            <button class="btn" type="button" data-a="undo">↶ Reprendre</button>
+            ${this.coach ? '<button class="btn" type="button" data-a="hint">Indice</button>' : ''}
+            <button class="btn" type="button" data-a="flip" aria-label="Retourner l'échiquier">⇅</button>
+            ${this.coach && Voice.supported ? '<button class="btn" type="button" data-a="voice"></button>' : ''}
+          </div>
+          <div class="status" aria-live="polite"></div>
+        </div>
+        ${this.coach && Voice.supported ? `<div class="panel voicebox">
+          <label for="coach-voice">Voix de l'entraîneuse
+            <select id="coach-voice"></select>
+          </label>
+          <div class="row"><button class="btn" type="button" data-a="test">Écouter</button><span class="voice-tag"></span></div>
+          <p class="engine-note voice-tip"></p>
+        </div>` : ''}
+        ${this.coach ? '<div class="verdict-box"></div><div class="tally"></div>' : ''}
+        <div class="moves" aria-label="Coups joués"></div>
+        ${this.coach ? `<div class="legend">${Object.values(VERDICTS).map(v => `<span style="--c:${v.color}">${v.label}</span>`).join('')}</div>` : ''}
+        <p class="engine-note"></p>
+      </div>`;
+    this.board = new Board(r.querySelector('.board-wrap'), {
+      interactive: () => !this.busy && !this.pending && !this.game.game_over() && this.game.turn() === this.userColor,
+      color: () => this.userColor,
+      onMove: mv => this.userMove(mv)
+    });
+    const sel = r.querySelector('select'); sel.value = this.level;
+    sel.onchange = () => { this.level = +sel.value; this.save(); };
+    r.querySelectorAll('.seg button').forEach(b => b.onclick = () => { this.userColor = b.dataset.c; this.save(); this.newGame(); });
+    r.querySelector('[data-a="new"]').onclick = () => this.newGame();
+    r.querySelector('[data-a="undo"]').onclick = () => this.undo();
+    r.querySelector('[data-a="flip"]').onclick = () => { this.board.flip(this.board.orientation === 'w' ? 'b' : 'w'); this.setEval(); };
+    const hb = r.querySelector('[data-a="hint"]'); if (hb) hb.onclick = () => this.hint();
+    const vb = r.querySelector('[data-a="voice"]');
+    if (vb) {
+      const paint = () => { vb.setAttribute('aria-pressed', Voice.on); vb.textContent = Voice.on ? 'Voix : activée' : 'Voix : coupée'; };
+      vb.onclick = () => { Voice.toggle(); paint(); r.querySelector('.voicebox').hidden = !Voice.on; }; paint();
+      const vs = r.querySelector('#coach-voice'), box = r.querySelector('.voicebox');
+      box.hidden = !Voice.on;
+      const fill = () => {
+        const all = Voice.list();
+        vs.innerHTML = all.length ? all.map(v => `<option value="${v.name.replace(/"/g, '&quot;')}">${v.name.replace(/</g, '&lt;')}${Voice.isNatural(v) ? ' · naturelle' : ''}</option>`).join('') : '<option>Voix française par défaut</option>';
+        if (Voice.voice) vs.value = Voice.voice.name;
+        const nat = Voice.isNatural(Voice.voice);
+        r.querySelector('.voice-tag').textContent = nat ? 'Voix naturelle' : '';
+        r.querySelector('.voice-tip').innerHTML = nat ? '' : "Aucune voix « naturelle » trouvée sur cet appareil. Pour une voix bien plus humaine : sur <b>iPhone/Mac</b>, télécharge « Amélie (Premium) » ou « Audrey (Améliorée) » dans Réglages › Accessibilité › Contenu énoncé › Voix › Français ; sur <b>PC ou Android</b>, ouvre le site dans <b>Microsoft Edge</b> et choisis « Denise Online (Natural) » ou « Vivienne Online (Natural) ».";
+      };
+      Voice.listeners.push(fill); fill();
+      vs.onchange = () => { Voice.choose(vs.value); fill(); Voice.say("Bonjour, je serai ton entraîneuse pendant cette partie."); };
+      r.querySelector('[data-a="test"]').onclick = () => { const was = Voice.on; Voice.on = true; Voice.say("Bonjour ! Joue ton coup, je te dirai s'il est bon et je t'expliquerai le meilleur."); Voice.on = was; };
+    }
+  }
+  save() { store.set(this.key, { level: this.level, color: this.userColor }); }
+  status(text, spin) { const s = this.root.querySelector('.status'); s.innerHTML = (spin ? '<span class="spin"></span>' : '') + text; }
+  newGame() {
+    if (this.coach) Voice.stop();
+    this.gen++; this.game = new Chess(); this.cache = new Map(); this.marks = []; this.pending = null; this.busy = false; this.hintLevel = 0;
+    this.tally = { best: 0, good: 0, inacc: 0, mist: 0, blun: 0 }; this.verdicts = [];
+    this.root.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === this.userColor));
+    this.board.orientation = this.userColor; this.board.arrowList = []; this.board.marks = [];
+    this.board.set(this.game);
+    if (this.coach) { this.setVerdict(null); this.setEval({ cp: 0 }); this.renderTally(); }
+    this.renderMoves();
+    this.turn();
+  }
+  analyse(fen, o) {
+    const key = fen + JSON.stringify(o || {});
+    if (!this.cache.has(key)) this.cache.set(key, Engine.analyse(fen, o || { depth: 13, time: 1500 }));
+    return this.cache.get(key);
+  }
+  async turn() {
+    const g = this.game, gen = this.gen;
+    this.board.render();
+    if (g.game_over()) { this.finish(); return; }
+    if (g.turn() !== this.userColor) {
+      this.busy = true; this.status("L'IA réfléchit…", true); this.board.render();
+      const lv = LEVELS[this.level];
+      const [res] = await Promise.all([Engine.analyse(g.fen(), { skill: lv.skill, depth: lv.depth, time: lv.time }), sleep(350)]);
+      if (gen !== this.gen || !res.best) return;
+      const m = g.move({ from: res.best.slice(0, 2), to: res.best.slice(2, 4), promotion: res.best[4] || 'q' });
+      this.busy = false; this.hintLevel = 0;
+      this.board.arrowList = this.pendingArrows || []; this.pendingArrows = null; this.board.marks = [];
+      this.board.set(g, m); this.renderMoves();
+      return this.turn();
+    }
+    this.status('À toi de jouer' + (g.in_check() ? ' : tu es en échec !' : '.'));
+    this.engineNote();
+    if (this.coach) this.analyse(g.fen()); // l'entraîneur prépare son analyse pendant que tu réfléchis
+  }
+  engineNote() {
+    const n = this.root.querySelector('.engine-note');
+    if (Engine.fallback) n.textContent = "Stockfish n'a pas pu démarrer dans ce navigateur : un moteur simplifié le remplace, ses conseils sont moins précis.";
+    else n.textContent = '';
+  }
+  async userMove(mv) {
+    if (this.pending) return;
+    const g = this.game, gen = this.gen, before = g.fen();
+    const m = g.move(mv); if (!m) return;
+    this.board.arrowList = []; this.board.marks = [];
+    this.board.set(g, m); this.renderMoves();
+    if (!this.coach) return this.turn();
+
+    this.busy = true; this.status("L'entraîneur analyse ton coup…", true); this.board.render();
+    const pre = await this.analyse(before);
+    let post = null, afterScore; // du point de vue du joueur
+    if (g.in_checkmate()) afterScore = { mate: 1 };
+    else if (g.game_over()) afterScore = { cp: 0 };
+    else { post = await this.analyse(g.fen()); afterScore = neg(post.score); }
+    if (gen !== this.gen) return;
+    this.busy = false;
+    const bestCp = cpOf(pre.score), afterCp = cpOf(afterScore);
+    const loss = Math.max(0, winPct(bestCp) - winPct(afterCp));
+    const isBest = pre.best === uciOf(m) || (g.in_checkmate());
+    const kind = classify(loss, isBest);
+    this.tally[kind]++; this.renderTally();
+    this.verdicts[g.history().length - 1] = kind; this.renderMoves();
+    const sign = this.userColor === 'w' ? 1 : -1;
+    const whiteEval = s => s.mate != null ? { mate: s.mate * sign } : { cp: s.cp * sign };
+    this.setEval(whiteEval(afterScore));
+    this.showVerdict(kind, { before, m, pre, post, bestScore: pre.score, afterScore, whiteEval });
+    if (kind === 'best' || kind === 'good' || g.game_over()) { this.pendingArrows = []; return this.turn(); }
+    this.pending = true;
+    this.status('Reprends ton coup ou continue la partie.');
+    this.board.render();
+  }
+  showVerdict(kind, d) {
+    const v = VERDICTS[kind], box = this.root.querySelector('.verdict-box');
+    const bestEx = d.pre.best ? explainMove(d.before, d.pre.best) : null;
+    const line = d.pre.pv ? fmtLine(d.before, pvToSan(d.before, d.pre.pv, 5)) : '';
+    let html = `<div class="tag">${v.label}</div><p>Tu as joué <span class="mono">${fr(d.m.san)}</span>. ${v.text}</p>`;
+    if (kind !== 'best' && bestEx) {
+      html += `<p><b>Le meilleur coup était <span class="mono">${fr(bestEx.san)}</span></b> : ${bestEx.text.charAt(0).toLowerCase() + bestEx.text.slice(1)}</p>`;
+      if (d.pre.pv && d.pre.pv.length > 1) html += `<p><small>Suite possible : <span class="mono">${line}</span></small></p>`;
+    } else if (kind === 'best' && d.post && d.post.best && !this.game.game_over()) {
+      html += `<p><small>${explainMove(d.before, uciOf(d.m)).text}</small></p>`;
+    }
+    if ((kind === 'mist' || kind === 'blun' || kind === 'inacc') && d.post && d.post.best) {
+      const reply = explainMove(this.game.fen(), d.post.best);
+      const mate = d.post.score.mate != null && d.post.score.mate > 0;
+      if (mate) html += `<p>Attention : après ton coup, l'adversaire a un mat en ${d.post.score.mate}, qui commence par <span class="mono">${fr(reply.san)}</span>.</p>`;
+      else if (reply.tactical) html += `<p>Le problème : l'adversaire peut répondre <span class="mono">${fr(reply.san)}</span>. ${reply.text}</p>`;
+      else html += `<p><small>La meilleure réponse adverse serait <span class="mono">${fr(reply.san)}</span>.</small></p>`;
+    }
+    const fe = s => fmtEval(d.whiteEval(s));
+    html += `<p><small>Évaluation (pour les Blancs) : <span class="mono">${fe(d.bestScore)}</span> avec le meilleur coup, <span class="mono">${fe(d.afterScore)}</span> après ton coup.</small></p>`;
+    if (kind !== 'best' && kind !== 'good' && !this.game.game_over()) html += `<div class="row"><button class="btn" type="button" data-v="retry">↶ Reprendre mon coup</button><button class="btn primary" type="button" data-v="go">Continuer</button></div>`;
+    this.setVerdict(kind, html);
+    // Ce que dit l'entraîneuse : le verdict, le meilleur coup et le danger principal, sans les chiffres.
+    let speech = `${v.label}. `;
+    if (kind === 'best' || kind === 'good') speech += v.text;
+    else {
+      speech += `Tu as joué ${sayMove(d.m.san)}. `;
+      if (bestEx) speech += `Le meilleur coup était ${sayMove(bestEx.san)} : ${bestEx.text.charAt(0).toLowerCase() + bestEx.text.slice(1)} `;
+      if (d.post && d.post.best) {
+        const reply = explainMove(this.game.fen(), d.post.best);
+        if (d.post.score.mate != null && d.post.score.mate > 0) speech += `Attention, l'adversaire a maintenant un mat en ${d.post.score.mate}.`;
+        else if (reply.tactical) speech += `Le problème, c'est que l'adversaire peut jouer ${sayMove(reply.san)}.`;
+      }
+    }
+    if (this.game.in_checkmate()) speech = 'Échec et mat ! Bravo, tu as gagné.';
+    Voice.say(speech);
+    const r = box.querySelector('[data-v="retry"]'), c = box.querySelector('[data-v="go"]');
+    if (r) r.onclick = () => { this.pending = null; this.game.undo(); this.tally[kind]--; this.renderTally(); const hh = this.game.history({ verbose: true }); this.board.arrowList = []; this.board.set(this.game, hh[hh.length - 1]); this.renderMoves(); this.setVerdict('retry', `<div class="tag">À toi</div><p>Cherche un meilleur coup. Besoin d'aide ? Clique sur « Indice ».</p>`); this.turn(); };
+    if (c) c.onclick = () => { this.pending = null; this.pendingArrows = []; box.querySelector('.row').remove(); this.turn(); };
+    // flèches : ton coup (orange) et le meilleur coup (bleu)
+    if (kind !== 'best' && bestEx && bestEx.move) {
+      this.board.arrows([[bestEx.move.from, bestEx.move.to]]);
+    }
+  }
+  setVerdict(kind, html) {
+    const box = this.root.querySelector('.verdict-box'); if (!box) return;
+    if (!kind) { box.innerHTML = `<div class="verdict"><div class="tag" style="font-size:19px">L'entraîneur t'observe</div><p>Joue ton coup : il sera noté de « Meilleur coup » à « Gaffe », avec l'explication du coup le plus fort.</p></div>`; return; }
+    box.innerHTML = `<div class="verdict ${kind}" aria-live="polite">${html}</div>`;
+  }
+  setEval(s) {
+    const wrap = this.root.querySelector('.evalbar'); if (!wrap || !this.coach) return;
+    if (s) this.lastEval = s; s = this.lastEval || { cp: 0 };
+    const pct = winPct(cpOf(s)), whiteBottom = this.board.orientation === 'w', whiteEnd = pct >= 50;
+    const bar = wrap.querySelector('.w'), lbl = wrap.querySelector('.lbl');
+    bar.style.height = pct + '%'; bar.style.top = whiteBottom ? 'auto' : '0'; bar.style.bottom = whiteBottom ? '0' : 'auto';
+    lbl.textContent = fmtEval(s);
+    const atBottom = whiteBottom === whiteEnd;
+    lbl.style.top = atBottom ? 'auto' : '5px'; lbl.style.bottom = atBottom ? '5px' : 'auto';
+    lbl.style.color = whiteEnd ? '#262a27' : '#f2f0e8';
+  }
+  renderTally() {
+    const t = this.root.querySelector('.tally'); if (!t) return;
+    t.innerHTML = Object.entries(VERDICTS).map(([k, v]) => `<div style="--c:${v.color}"><b>${this.tally[k]}</b>${v.label.replace(' coup', '')}</div>`).join('');
+  }
+  async hint() {
+    if (this.game.turn() !== this.userColor || this.busy || this.pending) return;
+    const gen = this.gen;
+    this.status("L'entraîneur cherche…", true);
+    const res = await this.analyse(this.game.fen());
+    if (gen !== this.gen || !res.best) return;
+    this.hintLevel++;
+    const from = res.best.slice(0, 2), to = res.best.slice(2, 4), p = this.game.get(from);
+    if (this.hintLevel === 1) { this.board.highlight([from]); this.status(`Indice : joue ${ART[p.type]} ${NAME[p.type]} en ${from}.`); Voice.say(`Indice : regarde ${ART[p.type]} ${NAME[p.type]} en ${from}.`); }
+    else { this.board.marks = [from]; this.board.arrows([[from, to]]); this.board.render(); const ex = explainMove(this.game.fen(), res.best); this.status(`Meilleur coup : ${fr(ex.san)}.`); Voice.say(`Le meilleur coup est ${sayMove(ex.san)}.`); }
+  }
+  undo() {
+    if (this.busy) return;
+    this.gen++; this.pending = null;
+    const g = this.game;
+    if (!g.history().length) return;
+    g.undo(); if (g.turn() !== this.userColor) g.undo();
+    const hh = g.history({ verbose: true });
+    this.board.arrowList = []; this.board.marks = [];
+    this.board.set(g, hh[hh.length - 1]); this.renderMoves();
+    if (this.coach) this.setVerdict(null);
+    this.turn();
+  }
+  renderMoves() {
+    const hist = this.game.history({ verbose: true }), box = this.root.querySelector('.moves');
+    this.verdicts.length = Math.min(this.verdicts.length, hist.length);
+    const cell = j => { if (!hist[j]) return '<span></span>'; const v = this.verdicts[j]; return `<span class="mv">${fr(hist[j].san)}${v ? `<i style="background:${VERDICTS[v].color}" title="${VERDICTS[v].label}"></i>` : ''}</span>`; };
+    let html = '';
+    for (let i = 0; i < hist.length; i += 2) html += `<span class="n">${i / 2 + 1}.</span>${cell(i)}${cell(i + 1)}`;
+    box.innerHTML = html; box.scrollTop = box.scrollHeight;
+  }
+  finish() {
+    const g = this.game; let txt;
+    if (g.in_checkmate()) txt = g.turn() === this.userColor ? "Échec et mat, l'IA gagne." : 'Échec et mat, tu as gagné !';
+    else if (g.in_stalemate()) txt = 'Pat : partie nulle.';
+    else if (g.in_threefold_repetition()) txt = 'Nulle par répétition.';
+    else if (g.insufficient_material()) txt = 'Nulle : matériel insuffisant.';
+    else txt = 'Partie nulle.';
+    this.status(`<span class="result">${txt}</span>`);
+    if (this.coach && !(g.in_checkmate() && g.turn() !== this.userColor)) Voice.say(txt);
+    this.board.render();
+  }
+}
+
+let coachArena = null, playArena = null;
+onShow.entraineur = () => { if (!coachArena) coachArena = new Arena($('#coach-arena'), true); };
+onShow.jouer = () => { if (!playArena) playArena = new Arena($('#play-arena'), false); };
+
+/* ====================== Histoire ====================== */
+(function () {
+  const tl = $('#timeline');
+  HISTORY.forEach(e => tl.appendChild(h('article', { class: 'ev' }, `<div class="y">${e.year}<small>${e.era}</small></div><div><h3>${e.title}</h3><p>${e.text}</p></div>`)));
+})();
+
+route();
+Engine.start();
+
+</script>
+<script>
+/* ====================== Application mobile (PWA) ====================== */
+(() => {
+  // Barre d'onglets du bas : réutilise les liens de l'en-tête, la classe « tabs » la garde synchronisée avec route().
+  const glyph = { accueil: '♔', lecons: '♗', entraineur: '♕', jouer: '♘', histoire: '♜' };
+  const bar = document.createElement('nav');
+  bar.className = 'tabs appbar'; bar.setAttribute('aria-label', 'Sections');
+  document.querySelectorAll('header nav.tabs a').forEach(a => {
+    const id = a.getAttribute('href').slice(1);
+    const b = document.createElement('a');
+    b.href = a.getAttribute('href');
+    b.setAttribute('aria-current', a.getAttribute('aria-current') || 'false');
+    b.innerHTML = `<span class="g">${glyph[id] || '♙'}&#xFE0E;</span>${a.textContent}`;
+    bar.appendChild(b);
+  });
+  document.body.appendChild(bar);
+
+  // Installation : bouton natif sur Android/Chrome, consigne sur iPhone.
+  const cta = document.querySelector('.hero .cta');
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  if (cta && !standalone) {
+    const btn = document.createElement('button');
+    btn.className = 'btn install'; btn.type = 'button'; btn.textContent = "Installer l'application";
+    cta.appendChild(btn);
+    let deferred = null;
+    window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; btn.classList.add('show'); });
+    btn.onclick = async () => { if (!deferred) return; deferred.prompt(); await deferred.userChoice; deferred = null; btn.classList.remove('show'); };
+    window.addEventListener('appinstalled', () => btn.classList.remove('show'));
+    if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
+      const tip = document.createElement('p');
+      tip.className = 'ios-tip show';
+      tip.innerHTML = "Sur iPhone : touche <b>Partager</b> puis <b>Sur l'écran d'accueil</b> pour installer Pion Passé comme une application.";
+      cta.after(tip);
+    }
+  }
+
+  // Petit retour haptique quand un coup est joué sur l'échiquier (Android).
+  document.addEventListener('pointerup', e => { if (e.pointerType === 'touch' && e.target.closest && e.target.closest('.board') && navigator.vibrate) navigator.vibrate(8); }, { passive: true });
+
+  if ('serviceWorker' in navigator && window.isSecureContext) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
+})();
+
+</script>
+</body>
+</html>
