@@ -29,8 +29,26 @@ const KokoroVoice = (() => {
 
   function audioContext() {
     if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    if (ctx.state !== 'running') ctx.resume().catch(() => {});
+    keepAwake();
     return ctx;
+  }
+  // Sur téléphone, la sortie audio se met en veille entre deux phrases et avale le début de la suivante
+  // le temps de se rallumer. Un souffle inaudible joué en boucle la garde éveillée tant que la voix est active.
+  let hum = null;
+  function keepAwake() {
+    if (hum || !ctx) return;
+    const b = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate), d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() - .5) * 2e-5;
+    hum = ctx.createBufferSource(); hum.buffer = b; hum.loop = true;
+    hum.connect(ctx.destination); hum.start();
+  }
+  function stopHum() { if (hum) { try { hum.stop(); } catch (e) {} hum = null; } }
+  // Attendre que l'audio tourne vraiment (sortie de veille, retour dans l'app) avant de lancer une phrase.
+  async function running(ac) {
+    if (ac.state === 'running') return false;
+    try { await Promise.race([ac.resume(), new Promise(r => setTimeout(r, 600))]); } catch (e) {}
+    return true;
   }
   // Les navigateurs mobiles n'autorisent le son qu'après un geste : on réveille l'audio au premier toucher.
   ['pointerdown', 'keydown'].forEach(ev => window.addEventListener(ev, () => { if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {}); }, { passive: true }));
@@ -74,7 +92,7 @@ const KokoroVoice = (() => {
     return loading;
   };
 
-  api.disable = function () { api.stop(); remember(false); if (worker) worker.terminate(); worker = null; loading = null; api.status = 'off'; changed(); };
+  api.disable = function () { api.stop(); stopHum(); remember(false); if (worker) worker.terminate(); worker = null; loading = null; api.status = 'off'; changed(); };
 
   function clean(text) {
     return String(text).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/[«»"]/g, '').replace(/\s+/g, ' ').trim();
@@ -123,6 +141,7 @@ const KokoroVoice = (() => {
     const my = token, ac = audioContext();
     const stopped = new Promise(r => { wake = r; });
     const jobs = parts.map(s => synth(s));
+    const woke = await running(ac);
     let t = 0;
     for (const job of jobs) {
       let audio;
@@ -132,7 +151,8 @@ const KokoroVoice = (() => {
       buf.getChannelData(0).set(audio);
       const src = ac.createBufferSource();
       src.buffer = buf; src.connect(ac.destination);
-      t = Math.max(t, ac.currentTime + 0.02);
+      // Premier départ un peu différé (0,25 s si l'audio vient de se réveiller) pour ne rien perdre de l'attaque.
+      t = Math.max(t, ac.currentTime + (playing.length ? 0.02 : woke ? 0.25 : 0.12));
       src.start(t);
       t += buf.duration + 0.12;
       playing.push(src);

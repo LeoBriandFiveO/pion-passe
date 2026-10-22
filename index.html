@@ -1731,7 +1731,7 @@ class Arena {
     if (this.coach) Voice.stop();
     this.gen++; this.game = new Chess(); this.cache = new Map(); this.marks = []; this.pending = null; this.busy = false; this.hintLevel = 0;
     this.view = null; this.showInsight(false);
-    this.told = new Set(); this.lastTold = -9; const an = this.root.querySelector('.anecdote'); if (an) an.hidden = true;
+    this.told = new Set(); this.lastTold = -9; this.deferredAnec = null; const an = this.root.querySelector('.anecdote'); if (an) an.hidden = true;
     this.tally = { best: 0, good: 0, inacc: 0, mist: 0, blun: 0 }; this.verdicts = [];
     this.root.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === this.userColor));
     this.board.orientation = this.userColor; this.board.arrowList = []; this.board.marks = [];
@@ -1843,10 +1843,25 @@ class Arena {
     }
     return true;
   }
+  /* Une seule anecdote par échange de coups : celle déclenchée par ton coup attend la réponse de l'IA,
+     qui peut la remplacer (ex. 1.e4 puis 1...c5 : on raconte la Sicilienne). Sinon les anecdotes
+     s'empilent derrière le verdict et le coup suivant les coupe. */
   tellAnecdote(m, ctx) {
-    const box = this.root.querySelector('.anecdote'); if (!box || !this.coach) return;
+    if (!this.root.querySelector('.anecdote') || !this.coach) return;
+    const mine = m.color === this.userColor;
     const a = this.findAnecdote(m, ctx);
-    if (!a) return;
+    if (mine) {
+      const waits = (ctx.kind === 'best' || ctx.kind === 'good') && !this.game.game_over();
+      if (waits) { this.deferredAnec = a; return; }
+      this.deferredAnec = null;
+      if (a) this.showAnecdote(a);
+      return;
+    }
+    const chosen = a || this.deferredAnec; this.deferredAnec = null;
+    if (chosen) this.showAnecdote(chosen);
+  }
+  showAnecdote(a) {
+    const box = this.root.querySelector('.anecdote');
     const ply = this.game.history().length;
     // Pas plus d'une anecdote tous les trois demi-coups, sauf pour une ouverture qu'on vient de reconnaître.
     if (!a.line && ply - this.lastTold < 3) return;
@@ -2057,7 +2072,7 @@ class Arena {
   }
   // Reprend la partie depuis la position consultée : les coups suivants sont effacés.
   replayFrom(k) {
-    this.gen++; this.busy = false; this.pending = null; this.pendingArrows = null; this.hintLevel = 0;
+    this.gen++; this.busy = false; this.pending = null; this.pendingArrows = null; this.hintLevel = 0; this.deferredAnec = null;
     const { g, hist } = this.positionsUpTo(k);
     this.game = g; this.view = null; this.showInsight(false);
     this.verdicts.length = k; this.retally();
