@@ -1432,7 +1432,7 @@ const Voice = {
 };
 Voice.available = Voice.supported || !!(window.AudioContext || window.webkitAudioContext);
 if (Voice.supported) { Voice.pick(); try { speechSynthesis.addEventListener('voiceschanged', () => Voice.pick()); } catch (e) {} }
-const bestSentence = ex => `Le meilleur coup était ${sayMove(ex.san)} : ${ex.text.charAt(0).toLowerCase() + ex.text.slice(1)}`;
+const bestSentence = (ex, intro) => `${intro || 'Le meilleur coup était'} ${sayMove(ex.san)} : ${ex.text.charAt(0).toLowerCase() + ex.text.slice(1)}`;
 /* Coup en notation -> phrase à prononcer : « Cxe5+ » devient « cavalier prend e5, échec ». */
 function sayMove(san) {
   if (/^O-O-O/.test(san)) return 'grand roque' + (san.includes('#') ? ', échec et mat' : san.includes('+') ? ', échec' : '');
@@ -1445,6 +1445,136 @@ function sayMove(san) {
   if (m[7] === '#') t += ', échec et mat'; else if (m[7] === '+') t += ', échec';
   return t;
 }
+
+/* ====================== Paroles de l'entraîneuse : variées et expliquées ======================
+   Les phrases parlées sont fixes (ou ne dépendent que du type de pièce) pour pouvoir être
+   pré-enregistrées avec la voix naturelle ; le détail des cases est affiché dans la carte. */
+const FEM = { r: 1, q: 1 };
+const fill = (tpl, t) => tpl
+  .replace(/\{Ton\}/g, FEM[t] ? 'Ta' : 'Ton').replace(/\{ton\}/g, FEM[t] ? 'ta' : 'ton')
+  .replace(/\{le\}/g, FEM[t] ? 'la' : 'le').replace(/\{un\}/g, t === 'q' ? 'la' : FEM[t] ? 'une' : 'un')
+  .replace(/\{il\}/g, FEM[t] ? 'elle' : 'il').replace(/\{e\}/g, FEM[t] ? 'e' : '').replace(/\{p\}/g, NAME[t] || 'pièce');
+const SAY = {
+  open: {
+    best: ["Excellent !", "Parfait, c'est le meilleur coup.", "Bravo, exactement ce qu'il fallait.", "Superbe coup !", "C'est le coup de l'ordinateur, bien joué."],
+    good: ["Bon coup.", "Bien joué.", "C'est solide.", "Très correct."],
+    inacc: ["Pas mal, mais il y avait mieux.", "Petite imprécision.", "C'est jouable, mais pas idéal.", "Hum, pas tout à fait."],
+    mist: ["Attention, c'est une erreur.", "Aïe, ce coup est une erreur.", "Ce n'est pas le bon plan.", "Oups, erreur."],
+    blun: ["Oh non, c'est une gaffe !", "Aïe aïe aïe, gaffe !", "Attention, grosse gaffe.", "Ça, c'est une gaffe."]
+  },
+  bestIntro: ["Il valait mieux jouer", "Le meilleur coup était", "Regarde plutôt", "Tu pouvais jouer"],
+  anecdote: ["Le saviez-vous ?", "Petite anecdote.", "Un peu d'histoire."],
+  why: {
+    mate: ["Échec et mat, bravo !", "Et c'est mat !"],
+    keepMate: ["Tu tiens le mat, continue.", "Le mat approche, ne lâche rien."],
+    win: ["Tu gagnes {un} {p}.", "Et hop, {un} {p} de plus pour toi."],
+    trade: ["Tu échanges au bon moment.", "Bon échange."],
+    escape: ["Tu mets {ton} {p} à l'abri.", "Bien vu, {ton} {p} était menacé{e}."],
+    defend: ["Tu protèges {ton} {p}.", "Bonne idée de défendre {ton} {p}."],
+    threat: ["Tu attaques {le} {p} adverse.", "Tu mets la pression sur {le} {p} adverse."],
+    check: ["Tu donnes échec et tu gardes l'initiative.", "Un échec qui force l'adversaire à réagir."],
+    castle: ["Ton roi est à l'abri et ta tour entre en jeu.", "Le roque, c'est la sécurité du roi."],
+    develop: ["Tu développes une pièce vers le centre.", "Sortir ses pièces, c'est le bon réflexe."],
+    center: ["Tu prends le contrôle du centre.", "Le centre, c'est la clé de l'ouverture."],
+    calm: ["La position reste équilibrée.", "Tu gardes une position saine."],
+    ahead: ["Tu gardes l'avantage.", "Ta position est très bonne."],
+    behind: ["La position est difficile, mais c'était le mieux.", "Tu te défends au mieux."],
+    allowMate: ["Attention, tu laisses un mat à l'adversaire.", "Ce coup permet à l'adversaire de mater."],
+    missMate: ["Tu avais un mat à jouer !", "Dommage, il y avait un mat."],
+    hangMoved: ["{Ton} {p} n'est plus protégé{e}.", "{Ton} {p} peut être pris{e}."],
+    hangOther: ["Ce coup laisse {ton} {p} sans défense.", "Tu oublies {ton} {p}, {il} est en prise."],
+    ignored: ["{Ton} {p} était menacé{e}, et tu ne l'as pas protégé{e}.", "Tu n'as pas vu la menace sur {ton} {p}."],
+    missWin: ["Tu pouvais gagner {un} {p}.", "Il y avait {un} {p} à prendre."],
+    tactic: ["L'adversaire a maintenant un coup tactique.", "Attention à la réponse adverse."],
+    kingMove: ["Bouger le roi te prive du roque.", "Ton roi aurait préféré roquer."],
+    earlyQueen: ["Sortir la dame si tôt l'expose aux attaques.", "La dame sortie trop tôt va se faire chasser."],
+    weakKing: ["Ce coup de pion affaiblit ton roi.", "Attention, ce pion protégeait ton roi."],
+    edgeKnight: ["Un cavalier au bord contrôle peu de cases.", "Cavalier au bord, cavalier mort, dit le proverbe."],
+    slow: ["C'est un peu lent, il y avait plus actif.", "Ce coup ne fait pas grand-chose."]
+  }
+};
+const lastPick = {};
+function pick(list, key) { // tirage au hasard, sans répéter la dernière phrase de la même famille
+  if (list.length < 2) return list[0];
+  let i; do { i = Math.floor(Math.random() * list.length); } while (list[i] === lastPick[key]);
+  return (lastPick[key] = list[i]);
+}
+/* Toutes les phrases fixes possibles (pour le pré-enregistrement de la voix naturelle). */
+function allFixedPhrases() {
+  const out = new Set(), types = ['p', 'n', 'b', 'r', 'q'];
+  Object.values(SAY.open).flat().forEach(s => out.add(s));
+  SAY.anecdote.forEach(s => out.add(s));
+  Object.values(SAY.why).flat().forEach(tpl => /\{/.test(tpl) ? types.forEach(t => out.add(fill(tpl, t))) : out.add(tpl));
+  return [...out];
+}
+function setTurnFen(fen, color) { const p = fen.split(' '); p[1] = color; p[3] = '-'; return p.join(' '); }
+/* Pièces de `color` attaquées et mal défendues (non protégées, ou attaquées par une pièce de moindre valeur). */
+function hangingPieces(fen, color) {
+  const opp = color === 'w' ? 'b' : 'w', t = new Chess(setTurnFen(fen, opp)), by = {};
+  for (const m of t.moves({ verbose: true })) if (m.captured && m.captured !== 'k') (by[m.to] = by[m.to] || []).push(m);
+  const out = [];
+  for (const sq in by) {
+    const cheapest = by[sq].sort((a, b) => VALUE[a.piece] - VALUE[b.piece])[0], type = cheapest.captured;
+    t.move(cheapest); const defended = t.moves({ verbose: true }).some(r => r.to === sq); t.undo();
+    if (!defended || VALUE[cheapest.piece] < VALUE[type]) out.push({ sq, type });
+  }
+  return out.sort((a, b) => VALUE[b.type] - VALUE[a.type]);
+}
+/* Pourquoi ce coup est bon ou mauvais : { key, t (type de pièce pour la phrase parlée), show (détail affiché) }. */
+function coachReason(kind, d, game, userColor) {
+  const m = d.m, before = d.before, after = game.fen(), good = kind === 'best' || kind === 'good';
+  const moveNo = +before.split(' ')[5];
+  const hb = hangingPieces(before, userColor), ha = hangingPieces(after, userColor);
+  const at = (list, sq) => list.find(x => x.sq === sq);
+  const userCp = cpOf(d.afterScore);
+  if (game.in_checkmate()) return { key: 'mate', show: 'Échec et mat !' };
+  if (good) {
+    if (d.pre.score.mate > 0) return { key: 'keepMate', show: `Tu as un mat en ${d.pre.score.mate} : continue d'attaquer le roi.` };
+    if (m.captured) {
+      const lost = at(ha, m.to) ? VALUE[m.piece] : 0;
+      if (VALUE[m.captured] - lost > 0) return { key: 'win', t: m.captured, show: `Tu prends ${ART[m.captured]} ${NAME[m.captured]} en ${m.to} et l'adversaire ne peut pas le récupérer sans perte.` };
+      return { key: 'trade', show: `L'échange en ${m.to} est équilibré et simplifie ta position.` };
+    }
+    const fled = at(hb, m.from);
+    if (fled) return { key: 'escape', t: m.piece, show: `${cap(ART[m.piece])} ${NAME[m.piece]} en ${m.from} était attaqué${FEM[m.piece] ? 'e' : ''} : tu ${FEM[m.piece] ? 'la' : 'le'} mets à l'abri en ${m.to}.` };
+    const saved = hb.find(x => x.sq !== m.from && !at(ha, x.sq));
+    if (saved) return { key: 'defend', t: saved.type, show: `Ton coup protège ${ART[saved.type]} ${NAME[saved.type]} en ${saved.sq}, qui était menacé${FEM[saved.type] ? 'e' : ''}.` };
+    const th = threatsFrom(game, m.to)[0];
+    if (th) return { key: 'threat', t: th.type, show: `${cap(ART[m.piece])} ${NAME[m.piece]} attaque ${ART[th.type]} ${NAME[th.type]} en ${th.sq}${th.defended ? '' : ', qui n\'est pas protégé' + (FEM[th.type] ? 'e' : '')}.` };
+    if (game.in_check()) return { key: 'check', show: `L'échec oblige l'adversaire à s'occuper de son roi.` };
+    if (m.flags.includes('k') || m.flags.includes('q')) return { key: 'castle', show: "Ton roi est en sécurité et ta tour rejoint le jeu." };
+    if (moveNo <= 10 && 'nb'.includes(m.piece) && (m.from[1] === '1' || m.from[1] === '8')) return { key: 'develop', show: `${cap(ART[m.piece])} ${NAME[m.piece]} sort et vise le centre.` };
+    if (moveNo <= 12 && ['d4', 'e4', 'd5', 'e5'].includes(m.to)) return { key: 'center', show: `Ta pièce en ${m.to} contrôle les cases centrales.` };
+    if (userCp > 150) return { key: 'ahead', show: "Tu conserves l'avantage." };
+    if (userCp < -150) return { key: 'behind', show: "La position est difficile, mais tu as trouvé la meilleure défense." };
+    return { key: 'calm', show: "La position reste équilibrée." };
+  }
+  // Coups imprécis, erreurs, gaffes.
+  if (d.post && d.post.score.mate > 0) return { key: 'allowMate', show: `Après ton coup, l'adversaire a un mat en ${d.post.score.mate}.` };
+  if (d.pre.score.mate > 0) return { key: 'missMate', show: `Tu avais un mat en ${d.pre.score.mate}.` };
+  if (d.post && d.post.best) {
+    const target = game.get(d.post.best.slice(2, 4));
+    if (target && target.color === userColor && target.type !== 'k') {
+      const sq = d.post.best.slice(2, 4), moved = sq === m.to;
+      const was = at(hb, sq);
+      return { key: moved ? 'hangMoved' : was ? 'ignored' : 'hangOther', t: target.type,
+        show: moved ? `${cap(ART[target.type])} ${NAME[target.type]} en ${sq} n'est plus protégé${FEM[target.type] ? 'e' : ''} : l'adversaire peut ${FEM[target.type] ? 'la' : 'le'} prendre.`
+          : was ? `${cap(ART[target.type])} ${NAME[target.type]} en ${sq} était menacé${FEM[target.type] ? 'e' : ''} et le reste après ton coup.`
+          : `Ton coup laisse ${ART[target.type]} ${NAME[target.type]} en ${sq} sans défense.` };
+    }
+  }
+  if (d.pre.best) {
+    const g2 = new Chess(before), bm = g2.move({ from: d.pre.best.slice(0, 2), to: d.pre.best.slice(2, 4), promotion: d.pre.best[4] || 'q' });
+    if (bm && bm.captured && !at(hangingPieces(g2.fen(), userColor), bm.to)) return { key: 'missWin', t: bm.captured, show: `Tu pouvais prendre ${ART[bm.captured]} ${NAME[bm.captured]} en ${bm.to}.` };
+  }
+  if (d.post && d.post.best && explainMove(after, d.post.best).tactical) return { key: 'tactic', show: `L'adversaire peut répondre ${fr(explainMove(after, d.post.best).san)}. ${explainMove(after, d.post.best).text}` };
+  if (m.piece === 'k' && !m.flags.includes('k') && !m.flags.includes('q') && moveNo <= 15) return { key: 'kingMove', show: "Ton roi a bougé : tu ne pourras plus roquer." };
+  if (m.piece === 'q' && moveNo <= 6) return { key: 'earlyQueen', show: "La dame sortie tôt va être chassée par les pièces adverses, qui gagneront du temps." };
+  if (m.piece === 'p' && 'fgh'.includes(m.from[0]) && moveNo <= 15 && ['1', '2', '7', '8'].includes(m.from[1])) return { key: 'weakKing', show: "Ce pion protégeait ton roi : son départ ouvre des lignes vers lui." };
+  if (m.piece === 'n' && 'ah'.includes(m.to[0])) return { key: 'edgeKnight', show: `Au bord, en ${m.to}, le cavalier contrôle moins de cases.` };
+  return { key: 'slow', show: "Ce coup ne crée pas de menace et n'améliore pas vraiment ta position." };
+}
+function reasonSpeech(r) { return fill(pick(SAY.why[r.key], 'why-' + r.key), r.t); }
 
 const VERDICTS = {
   best: { label: 'Meilleur coup', color: 'var(--v-best)', text: "C'est exactement le coup de Stockfish." },
@@ -1636,7 +1766,11 @@ class Arena {
     this.engineNote();
     if (this.coach) { // l'entraîneur prépare son analyse (et la phrase du meilleur coup) pendant que tu réfléchis
       const fen = g.fen();
-      this.analyse(fen).then(r => { if (r.best && this.game.fen() === fen) Voice.prepare(bestSentence(explainMove(fen, r.best))); });
+      this.analyse(fen).then(r => {
+        if (!r.best || this.game.fen() !== fen) return;
+        this.prepBest = { fen, text: bestSentence(explainMove(fen, r.best), pick(SAY.bestIntro, 'best')) };
+        Voice.prepare(this.prepBest.text);
+      });
     }
   }
   engineNote() {
@@ -1720,13 +1854,14 @@ class Arena {
     box.innerHTML = `<div class="anec-head"><span class="eyebrow">Le saviez-vous ? · ${a.year}</span><button type="button" class="anec-x" aria-label="Fermer l'anecdote">×</button></div><h4>${a.title}</h4><p>${a.text}</p><a href="#histoire">Voir la frise de l'histoire →</a>`;
     box.hidden = false;
     box.querySelector('.anec-x').onclick = () => { box.hidden = true; };
-    Voice.sayAfter('Le saviez-vous ? ' + a.say);
+    Voice.sayAfter(pick(SAY.anecdote, 'anec') + ' ' + a.say);
   }
   showVerdict(kind, d) {
     const v = VERDICTS[kind], box = this.root.querySelector('.verdict-box');
     const bestEx = d.pre.best ? explainMove(d.before, d.pre.best) : null;
     const line = d.pre.pv ? fmtLine(d.before, pvToSan(d.before, d.pre.pv, 5)) : '';
-    let html = `<div class="tag">${v.label}</div><p>Tu as joué <span class="mono">${fr(d.m.san)}</span>. ${v.text}</p>`;
+    const why = coachReason(kind, d, this.game, this.userColor);
+    let html = `<div class="tag">${v.label}</div><p>Tu as joué <span class="mono">${fr(d.m.san)}</span>. ${v.text}</p><p><b>Pourquoi :</b> ${why.show}</p>`;
     if (kind !== 'best' && bestEx) {
       html += `<p><b>Le meilleur coup était <span class="mono">${fr(bestEx.san)}</span></b> : ${bestEx.text.charAt(0).toLowerCase() + bestEx.text.slice(1)}</p>`;
       if (d.pre.pv && d.pre.pv.length > 1) html += `<p><small>Suite possible : <span class="mono">${line}</span></small></p>`;
@@ -1745,18 +1880,13 @@ class Arena {
     if (kind !== 'best' && kind !== 'good' && !this.game.game_over()) html += `<div class="row"><button class="btn" type="button" data-v="retry">↶ Reprendre mon coup</button><button class="btn primary" type="button" data-v="go">Continuer</button></div>`;
     this.setVerdict(kind, html);
     // Ce que dit l'entraîneuse : le verdict, le meilleur coup et le danger principal, sans les chiffres.
-    let speech = `${v.label}. `;
-    if (kind === 'best' || kind === 'good') speech += v.text;
-    else {
-      // Le coup joué est déjà affiché : on enchaîne directement sur le meilleur coup, souvent synthétisé à l'avance.
-      if (bestEx) speech += bestSentence(bestEx) + ' ';
-      if (d.post && d.post.best) {
-        const reply = explainMove(this.game.fen(), d.post.best);
-        if (d.post.score.mate != null && d.post.score.mate > 0) speech += `Attention, l'adversaire a maintenant un mat en ${d.post.score.mate}.`;
-        else if (reply.tactical) speech += `Le problème, c'est que l'adversaire peut jouer ${sayMove(reply.san)}.`;
-      }
+    // Une ouverture variée, la raison du verdict, puis (si besoin) le meilleur coup, souvent synthétisé à l'avance.
+    let speech = this.game.in_checkmate() ? '' : pick(SAY.open[kind], 'open-' + kind) + ' ';
+    speech += reasonSpeech(why);
+    if (kind !== 'best' && kind !== 'good' && bestEx && !this.game.in_checkmate()) {
+      const prepared = this.prepBest && this.prepBest.fen === d.before ? this.prepBest.text : bestSentence(bestEx, pick(SAY.bestIntro, 'best'));
+      speech += ' ' + prepared;
     }
-    if (this.game.in_checkmate()) speech = 'Échec et mat ! Bravo, tu as gagné.';
     Voice.say(speech);
     const r = box.querySelector('[data-v="retry"]'), c = box.querySelector('[data-v="go"]');
     if (r) r.onclick = () => { this.pending = null; this.game.undo(); this.verdicts.length = this.game.history().length; this.retally(); const hh = this.game.history({ verbose: true }); this.board.arrowList = []; this.board.set(this.game, hh[hh.length - 1]); this.renderMoves(); this.setVerdict('retry', `<div class="tag">À toi</div><p>Cherche un meilleur coup. Besoin d'aide ? Clique sur « Indice ».</p>`); this.turn(); };

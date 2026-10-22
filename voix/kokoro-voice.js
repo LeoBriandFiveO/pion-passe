@@ -35,13 +35,17 @@ const KokoroVoice = (() => {
   // Les navigateurs mobiles n'autorisent le son qu'après un geste : on réveille l'audio au premier toucher.
   ['pointerdown', 'keydown'].forEach(ev => window.addEventListener(ev, () => { if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {}); }, { passive: true }));
 
+  // phrases.json : { files: [...], index: { phrase: [fichier, début, longueur] } } (ancien format : { phrase: [début, longueur] }).
   function loadFixed() {
-    if (!fixedLoading) fixedLoading = Promise.all([
-      fetch(api.base + 'phrases.json', { cache: 'no-cache' }).then(r => r.json()),
-      fetch(api.base + 'phrases.pcm.wasm', { cache: 'no-cache' }).then(r => r.arrayBuffer()),
-    ]).then(([index, buf]) => {
-      const pcm = new Int16Array(buf);
-      for (const [text, [o, n]] of Object.entries(index)) fixed.set(text, Float32Array.from(pcm.subarray(o, o + n), x => x / 32768));
+    if (!fixedLoading) fixedLoading = fetch(api.base + 'phrases.json', { cache: 'no-cache' }).then(r => r.json()).then(meta => {
+      const files = meta.files || ['phrases.pcm.wasm'], index = meta.index || meta;
+      return Promise.all(files.map(f => fetch(api.base + f, { cache: 'no-cache' }).then(r => r.arrayBuffer()))).then(bufs => {
+        const pcm = bufs.map(b => new Int16Array(b));
+        for (const [text, e] of Object.entries(index)) {
+          const [f, o, n] = e.length === 3 ? e : [0, e[0], e[1]];
+          fixed.set(text, Float32Array.from(pcm[f].subarray(o, o + n), x => x / 32768));
+        }
+      });
     }).catch(() => {});
     return fixedLoading;
   }

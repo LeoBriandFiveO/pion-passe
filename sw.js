@@ -1,6 +1,6 @@
 /* Service worker de Pion Passé : l'application fonctionne hors ligne une fois ouverte,
    et la page est « isolée » (COOP/COEP) pour que la voix Kokoro puisse calculer sur plusieurs cœurs. */
-const VERSION = '0eb6e511b7';
+const VERSION = '5a02db2ff6';
 const CORE = `pp-core-${VERSION}`;
 const ASSETS = ['./', './index.html', './chess.js', './stockfish.js', './manifest.webmanifest', './fonts.css',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/favicon-32.png',
@@ -41,7 +41,7 @@ self.addEventListener('fetch', e => {
   if (BIG.test(url.pathname)) { e.respondWith(fetch(req).then(isolate)); return; }
   // Phrases pré-enregistrées et code de la voix : le réseau d'abord, sinon une mise à jour de l'app
   // garderait l'ancienne liste de phrases jusqu'au lancement suivant.
-  if (/\/voix\/[^/]+\.(json|js|mjs)$|\/voix\/phrases\.pcm\.wasm$/.test(url.pathname)) {
+  if (/\/voix\/[^/]+\.(json|js|mjs)$|\/voix\/phrases(-\d+)?\.pcm\.wasm$/.test(url.pathname)) {
     e.respondWith(fetch(req).then(r => { if (r.ok) { const c = r.clone(); caches.open(CORE).then(x => x.put(req, c)); } return isolate(r); })
       .catch(() => caches.match(req, { ignoreSearch: true }).then(isolate)));
     return;
