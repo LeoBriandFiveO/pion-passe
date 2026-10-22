@@ -15,9 +15,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <title>Pion Passé</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+Symbols+2&display=swap">
+<link rel="stylesheet" href="fonts.css">
 <style>
 /* Table de club : échiquier vinyle vert et chamois, feuille de notation en mono, titres en slab */
 :root {
@@ -227,6 +225,12 @@ select { font: inherit; padding: 7px 10px; border-radius: 8px; border: 1px solid
 .voicebox select { min-width: 0; width: 100%; }
 .voice-tag { font-size: 13px; font-weight: 700; color: var(--v-best); }
 .voice-tip:empty { display: none; }
+.kokoro { display: grid; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.kokoro .btn { white-space: normal; text-align: left; }
+.k-state { font-size: 13px; color: var(--muted); font-weight: 600; }
+.k-state.ok { color: var(--v-best); } .k-state.ko { color: var(--v-blun); }
+.k-bar { height: 6px; border-radius: 3px; background: var(--sunk); overflow: hidden; }
+.k-bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
 .tally { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; text-align: center; font-size: 12px; color: var(--muted); }
 .tally b { display: block; font: 700 20px/1.2 var(--font-mono); color: var(--c); }
 
@@ -392,6 +396,7 @@ nav.appbar { display: none; }
 <footer><div class="wrap">Pion Passé · Moteur Stockfish (GPL) exécuté dans ton navigateur · Notation française : R roi, D dame, T tour, F fou, C cavalier.</div></footer>
 
 <script src="chess.js"></script>
+<script src="voix/kokoro-voice.js"></script>
 
 <script>
 /* ---------- Contenus : leçons, ouvertures, tactiques, histoire ---------- */
@@ -1235,7 +1240,15 @@ const Voice = {
   listeners: [],
   choose(name) { store.set('voiceName', name); this.voice = this.list().find(v => v.name === name) || null; },
   isNatural(v) { return !!v && this.NATURAL.test(v.name); },
+  /* La voix naturelle Kokoro (voix/kokoro-voice.js), si elle est activée, passe avant la voix du navigateur. */
+  kokoro() { return typeof KokoroVoice !== 'undefined' && KokoroVoice.supported ? KokoroVoice : null; },
   say(text) {
+    if (!this.on || !text) return;
+    const K = this.kokoro();
+    if (K && K.status !== 'off') { K.fallback = t => this.sayNative(t); return K.say(text); }
+    return this.sayNative(text);
+  },
+  sayNative(text) {
     if (!this.on || !this.supported || !text) return;
     try {
       speechSynthesis.cancel();
@@ -1249,10 +1262,14 @@ const Voice = {
       speechSynthesis.speak(u);
     } catch (e) {}
   },
-  stop() { try { this.supported && speechSynthesis.cancel(); } catch (e) {} },
+  stop() { try { this.supported && speechSynthesis.cancel(); } catch (e) {} const K = this.kokoro(); if (K) K.stop(); },
+  /* Synthétise à l'avance une phrase probable (voix naturelle seulement, qui est lente à calculer). */
+  prepare(text) { const K = this.kokoro(); if (this.on && K && K.status === 'ready') K.prepare(text); },
   toggle() { this.on = !this.on; store.set('voice', this.on); if (!this.on) this.stop(); else this.say("Je suis ton entraîneuse. Je commenterai chacun de tes coups."); }
 };
+Voice.available = Voice.supported || !!(window.AudioContext || window.webkitAudioContext);
 if (Voice.supported) { Voice.pick(); try { speechSynthesis.addEventListener('voiceschanged', () => Voice.pick()); } catch (e) {} }
+const bestSentence = ex => `Le meilleur coup était ${sayMove(ex.san)} : ${ex.text.charAt(0).toLowerCase() + ex.text.slice(1)}`;
 /* Coup en notation -> phrase à prononcer : « Cxe5+ » devient « cavalier prend e5, échec ». */
 function sayMove(san) {
   if (/^O-O-O/.test(san)) return 'grand roque' + (san.includes('#') ? ', échec et mat' : san.includes('+') ? ', échec' : '');
@@ -1313,12 +1330,16 @@ class Arena {
             <button class="btn" type="button" data-a="undo">↶ Reprendre</button>
             ${this.coach ? '<button class="btn" type="button" data-a="hint">Indice</button>' : ''}
             <button class="btn" type="button" data-a="flip" aria-label="Retourner l'échiquier">⇅</button>
-            ${this.coach && Voice.supported ? '<button class="btn" type="button" data-a="voice"></button>' : ''}
+            ${this.coach && Voice.available ? '<button class="btn" type="button" data-a="voice"></button>' : ''}
           </div>
           <div class="status" aria-live="polite"></div>
         </div>
-        ${this.coach && Voice.supported ? `<div class="panel voicebox">
-          <label for="coach-voice">Voix de l'entraîneuse
+        ${this.coach && Voice.available ? `<div class="panel voicebox">
+          <div class="kokoro" hidden>
+            <div class="row"><button class="btn" type="button" data-a="kokoro"></button><span class="k-state"></span></div>
+            <div class="k-bar" hidden><i></i></div>
+          </div>
+          <label for="coach-voice" class="native-pick">Voix du navigateur
             <select id="coach-voice"></select>
           </label>
           <div class="row"><button class="btn" type="button" data-a="test">Écouter</button><span class="voice-tag"></span></div>
@@ -1353,11 +1374,40 @@ class Arena {
         if (Voice.voice) vs.value = Voice.voice.name;
         const nat = Voice.isNatural(Voice.voice);
         r.querySelector('.voice-tag').textContent = nat ? 'Voix naturelle' : '';
-        r.querySelector('.voice-tip').innerHTML = nat ? '' : "Aucune voix « naturelle » trouvée sur cet appareil. Pour une voix bien plus humaine : sur <b>iPhone/Mac</b>, télécharge « Amélie (Premium) » ou « Audrey (Améliorée) » dans Réglages › Accessibilité › Contenu énoncé › Voix › Français ; sur <b>PC ou Android</b>, ouvre le site dans <b>Microsoft Edge</b> et choisis « Denise Online (Natural) » ou « Vivienne Online (Natural) ».";
+        r.querySelector('.voice-tip').innerHTML = nat ? '' : (Voice.kokoro() ? "Le plus simple : active la voix naturelle ci-dessus. " : '') + "Aucune voix « naturelle » trouvée sur cet appareil. Pour une voix bien plus humaine : sur <b>iPhone/Mac</b>, télécharge « Amélie (Premium) » ou « Audrey (Améliorée) » dans Réglages › Accessibilité › Contenu énoncé › Voix › Français ; sur <b>PC ou Android</b>, ouvre le site dans <b>Microsoft Edge</b> et choisis « Denise Online (Natural) » ou « Vivienne Online (Natural) ».";
       };
       Voice.listeners.push(fill); fill();
+      if (!Voice.supported) r.querySelector('.native-pick').hidden = true;
+      // Voix naturelle Kokoro : interrupteur, progression du téléchargement, état.
+      const K = Voice.kokoro();
+      if (K) {
+        const kb = r.querySelector('.kokoro'), btn = kb.querySelector('[data-a="kokoro"]'), st = kb.querySelector('.k-state'), bar = kb.querySelector('.k-bar');
+        kb.hidden = false;
+        const paintK = () => {
+          const on = K.status === 'loading' || K.status === 'ready';
+          btn.textContent = on ? 'Désactiver la voix naturelle' : 'Activer la voix naturelle (téléchargement 110 Mo, une seule fois)';
+          btn.className = on ? 'btn' : 'btn primary';
+          bar.hidden = K.status !== 'loading';
+          bar.querySelector('i').style.width = Math.round(K.progress * 100) + '%';
+          st.textContent = K.status === 'loading' ? (K.progress < 1 ? `Téléchargement ${Math.round(K.progress * 100)} %` : 'Préparation de la voix…')
+            : K.status === 'ready' ? 'Voix naturelle prête' : K.status === 'error' ? `Échec : ${K.error || 'erreur inconnue'}. La voix du navigateur prend le relais.` : '';
+          st.className = 'k-state' + (K.status === 'ready' ? ' ok' : K.status === 'error' ? ' ko' : '');
+          const native = K.status !== 'ready' && Voice.supported;
+          r.querySelector('.native-pick').hidden = !native;
+          r.querySelector('.voice-tip').hidden = !native;
+          r.querySelector('.voice-tag').hidden = K.status === 'ready';
+        };
+        const prev = K.onchange; K.onchange = k => { try { prev && prev(k); } catch (e) {} paintK(); };
+        btn.onclick = () => {
+          if (K.status === 'loading' || K.status === 'ready') { K.disable(); paintK(); return; }
+          K.enable().then(() => Voice.say("Bonjour, je serai ton entraîneuse pendant cette partie."), () => {});
+          paintK();
+        };
+        paintK();
+      }
       vs.onchange = () => { Voice.choose(vs.value); fill(); Voice.say("Bonjour, je serai ton entraîneuse pendant cette partie."); };
       r.querySelector('[data-a="test"]').onclick = () => { const was = Voice.on; Voice.on = true; Voice.say("Bonjour ! Joue ton coup, je te dirai s'il est bon et je t'expliquerai le meilleur."); Voice.on = was; };
+      vs.disabled = !Voice.supported;
     }
   }
   save() { store.set(this.key, { level: this.level, color: this.userColor }); }
@@ -1395,7 +1445,10 @@ class Arena {
     }
     this.status('À toi de jouer' + (g.in_check() ? ' : tu es en échec !' : '.'));
     this.engineNote();
-    if (this.coach) this.analyse(g.fen()); // l'entraîneur prépare son analyse pendant que tu réfléchis
+    if (this.coach) { // l'entraîneur prépare son analyse (et la phrase du meilleur coup) pendant que tu réfléchis
+      const fen = g.fen();
+      this.analyse(fen).then(r => { if (r.best && this.game.fen() === fen) Voice.prepare(bestSentence(explainMove(fen, r.best))); });
+    }
   }
   engineNote() {
     const n = this.root.querySelector('.engine-note');
@@ -1459,8 +1512,8 @@ class Arena {
     let speech = `${v.label}. `;
     if (kind === 'best' || kind === 'good') speech += v.text;
     else {
-      speech += `Tu as joué ${sayMove(d.m.san)}. `;
-      if (bestEx) speech += `Le meilleur coup était ${sayMove(bestEx.san)} : ${bestEx.text.charAt(0).toLowerCase() + bestEx.text.slice(1)} `;
+      // Le coup joué est déjà affiché : on enchaîne directement sur le meilleur coup, souvent synthétisé à l'avance.
+      if (bestEx) speech += bestSentence(bestEx) + ' ';
       if (d.post && d.post.best) {
         const reply = explainMove(this.game.fen(), d.post.best);
         if (d.post.score.mate != null && d.post.score.mate > 0) speech += `Attention, l'adversaire a maintenant un mat en ${d.post.score.mate}.`;
@@ -1598,6 +1651,7 @@ Engine.start();
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
   }
 })();
+
 
 </script>
 </body>
