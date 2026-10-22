@@ -1,6 +1,6 @@
 /* Service worker de Pion Passé : l'application fonctionne hors ligne une fois ouverte,
    et la page est « isolée » (COOP/COEP) pour que la voix Kokoro puisse calculer sur plusieurs cœurs. */
-const VERSION = 'b27b1b9d31';
+const VERSION = 'a8098f9507';
 const CORE = `pp-core-${VERSION}`;
 const ASSETS = ['./', './index.html', './chess.js', './stockfish.js', './manifest.webmanifest', './fonts.css',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/favicon-32.png',

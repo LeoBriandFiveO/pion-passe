@@ -300,6 +300,59 @@ nav.appbar { display: none; }
   .top .wrap { padding-block: 6px; }
   .brand b { font-size: 20px; }
 }
+
+/* ---------- Animations ---------- */
+:root { --ease-out: cubic-bezier(.22, 1, .36, 1); }
+/* Seul le contenu glisse : l'en-tête et la barre d'onglets restent en place. */
+.top { view-transition-name: entete; }
+nav.appbar { view-transition-name: onglets; }
+main { view-transition-name: page; }
+::view-transition-group(page) { animation-duration: .38s; animation-timing-function: var(--ease-out); }
+::view-transition-old(page) { animation: .22s ease-in both vt-out; }
+::view-transition-new(page) { animation: .38s var(--ease-out) both vt-in; }
+:root[data-dir="next"]::view-transition-old(page) { animation-name: vt-out-left; }
+:root[data-dir="next"]::view-transition-new(page) { animation-name: vt-in-right; }
+:root[data-dir="prev"]::view-transition-old(page) { animation-name: vt-out-right; }
+:root[data-dir="prev"]::view-transition-new(page) { animation-name: vt-in-left; }
+@keyframes vt-out { to { opacity: 0; transform: scale(.985); } }
+@keyframes vt-in { from { opacity: 0; transform: scale(1.015); } }
+@keyframes vt-out-left { to { opacity: 0; transform: translateX(-14%); } }
+@keyframes vt-out-right { to { opacity: 0; transform: translateX(14%); } }
+@keyframes vt-in-right { from { opacity: 0; transform: translateX(22%); } }
+@keyframes vt-in-left { from { opacity: 0; transform: translateX(-22%); } }
+
+/* Repli sans View Transitions (anciens navigateurs, retour arrière) */
+section[data-view].enter { animation: enter .36s var(--ease-out) both; }
+@keyframes enter { from { opacity: 0; transform: translateY(10px); } }
+
+/* Cascade d'apparition des blocs */
+.rise { animation: rise .5s var(--ease-out) both; animation-delay: var(--d, 0ms); }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+
+/* Retour au toucher */
+.btn, .seg button, .path, .catalog button, nav.appbar a { transition: transform .15s var(--ease-out), background-color .2s, color .2s, border-color .2s; }
+.btn:active, .seg button:active, .catalog button:active { transform: scale(.96); }
+.path:active { transform: scale(.98); }
+.verdict { animation: pop .42s var(--ease-out) both; }
+@keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.97); } }
+
+@media (max-width: 760px) {
+  nav.appbar { position: fixed; }
+  nav.appbar .pill { position: absolute; z-index: 0; top: 4px; height: 52px; left: max(6px, env(safe-area-inset-left, 0px));
+    width: calc((100% - 2 * max(6px, env(safe-area-inset-left, 0px))) / 5);
+    transform: translateX(calc(var(--i, 0) * 100%)); border-radius: 14px;
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    transition: transform .42s cubic-bezier(.34, 1.4, .5, 1); }
+  nav.appbar a { position: relative; z-index: 1; }
+  nav.appbar a[aria-current="page"] { background: transparent; }
+  nav.appbar a .g { transition: transform .35s cubic-bezier(.34, 1.6, .5, 1); }
+  nav.appbar a.pop .g { transform: translateY(-2px) scale(1.14); }
+  nav.appbar a:active .g { transform: scale(.88); }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+  .rise, section[data-view].enter, .verdict { animation: none !important; }
+}
 </style>
 
 </head>
@@ -1654,6 +1707,68 @@ Engine.start();
   }
 })();
 
+
+/* ====================== Animations entre les onglets ====================== */
+(() => {
+  const order = ['accueil', 'lecons', 'entraineur', 'jouer', 'histoire'];
+  const root = document.documentElement;
+  const still = matchMedia('(prefers-reduced-motion: reduce)');
+  const viewOf = hash => { const v = (hash || '#accueil').slice(1).split('/')[0]; return order.includes(v) ? v : 'accueil'; };
+  const visible = () => document.querySelector('main section[data-view]:not([hidden])');
+
+  // Pastille de la barre d'onglets : elle glisse vers l'onglet actif.
+  const bar = document.querySelector('nav.appbar');
+  const pill = document.createElement('span');
+  pill.className = 'pill'; pill.setAttribute('aria-hidden', 'true');
+  if (bar) bar.prepend(pill);
+  const placePill = () => {
+    if (!bar) return;
+    const i = order.indexOf(viewOf(location.hash));
+    bar.style.setProperty('--i', i);
+    bar.querySelectorAll('a').forEach((a, j) => a.classList.toggle('pop', j === i));
+  };
+
+  // Apparition en cascade des blocs de l'écran qui arrive.
+  const cascade = section => {
+    if (!section || still.matches) return;
+    const items = section.querySelectorAll(':scope > .sec-head, :scope > .hero, .path, .catalog > *, .player > *, .arena > *, .ev, .fact');
+    items.forEach((el, k) => {
+      el.classList.remove('rise');
+      el.style.setProperty('--d', Math.min(k, 10) * 45 + 'ms');
+      void el.offsetWidth;
+      el.classList.add('rise');
+      el.addEventListener('animationend', () => el.classList.remove('rise'), { once: true });
+    });
+  };
+
+  // Changement d'écran lancé par un lien interne : on l'enveloppe dans une View Transition.
+  let inTransition = false;
+  document.addEventListener('click', e => {
+    const a = e.target.closest && e.target.closest('a[href^="#"]');
+    if (!a || e.defaultPrevented || e.button > 0 || e.metaKey || e.ctrlKey) return;
+    const to = a.getAttribute('href');
+    if (to === location.hash || (to === '#accueil' && !location.hash)) return;
+    const from = viewOf(location.hash), dest = viewOf(to);
+    if (!document.startViewTransition || still.matches) return;   // repli : animation CSS simple
+    e.preventDefault();
+    root.dataset.dir = dest === from ? 'same' : order.indexOf(dest) > order.indexOf(from) ? 'next' : 'prev';
+    inTransition = true;
+    const t = document.startViewTransition(() => new Promise(resolve => {
+      window.addEventListener('hashchange', () => resolve(), { once: true });
+      location.hash = to;
+    }));
+    t.finished.finally(() => { inTransition = false; delete root.dataset.dir; });
+  }, true);
+
+  window.addEventListener('hashchange', () => {
+    placePill();
+    const s = visible();
+    if (!inTransition && s && !still.matches) { s.classList.remove('enter'); void s.offsetWidth; s.classList.add('enter'); }
+    cascade(s);
+  });
+  placePill();
+  cascade(visible());
+})();
 
 </script>
 </body>
