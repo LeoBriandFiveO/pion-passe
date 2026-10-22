@@ -203,7 +203,17 @@ select { font: inherit; padding: 7px 10px; border-radius: 8px; border: 1px solid
 @keyframes spin { to { transform: rotate(360deg); } }
 .moves { font-family: var(--font-mono); font-size: 14px; max-height: 220px; overflow: auto; background: var(--sunk); border-radius: 8px; padding: 8px 10px; display: grid; grid-template-columns: 3ch 1fr 1fr; gap: 2px 10px; align-content: start; }
 .moves .n { color: var(--muted); }
-.moves .mv { white-space: nowrap; }
+.moves .mv { white-space: nowrap; border: 0; background: none; color: inherit; font: inherit; text-align: left; padding: 1px 4px; margin: -1px -4px; border-radius: 4px; cursor: pointer; }
+.moves .mv:hover { background: var(--line); }
+.moves .mv.cur { background: var(--accent); color: var(--accent-ink); }
+.leftcol { display: grid; gap: 10px; min-width: 0; align-content: start; }
+.navrow { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.navrow .navpos { min-width: 13ch; text-align: center; font-size: 13px; color: var(--muted); }
+.leftcol.reviewing .board { box-shadow: 0 0 0 3px var(--brass), 0 10px 30px -14px rgba(0,0,0,.35); }
+.leftcol.reviewing .navpos { color: var(--brass); font-weight: 600; }
+.insight .verdict .row { margin-top: 4px; }
+.thinking { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.thinking .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
 .moves .mv i { font-style: normal; display: inline-block; width: .7em; height: .7em; border-radius: 50%; margin-left: 4px; vertical-align: middle; }
 .moves:empty::before { content: "Les coups apparaîtront ici."; grid-column: 1 / -1; color: var(--muted); font-family: var(--font-body); }
 .verdict { border-left: 5px solid var(--muted); background: var(--surface); border-radius: 8px; padding: 14px 16px; display: grid; gap: 8px; box-shadow: inset 0 0 0 1px var(--line); }
@@ -1366,11 +1376,21 @@ class Arena {
   build() {
     const r = this.root;
     r.innerHTML = `
-      <div class="boardcol">
-        <div class="evalbar" ${this.coach ? '' : 'hidden'} aria-hidden="true"><div class="w"></div><span class="lbl"></span></div>
-        <div class="board-wrap"></div>
+      <div class="leftcol">
+        <div class="boardcol">
+          <div class="evalbar" ${this.coach ? '' : 'hidden'} aria-hidden="true"><div class="w"></div><span class="lbl"></span></div>
+          <div class="board-wrap"></div>
+        </div>
+        <div class="navrow" role="group" aria-label="Parcourir la partie">
+          <button class="btn icon" type="button" data-n="first" aria-label="Début de la partie">⏮</button>
+          <button class="btn icon" type="button" data-n="prev" aria-label="Coup précédent">◀</button>
+          <span class="navpos mono"></span>
+          <button class="btn icon" type="button" data-n="next" aria-label="Coup suivant">▶</button>
+          <button class="btn icon" type="button" data-n="last" aria-label="Revenir à la position actuelle">⏭</button>
+        </div>
       </div>
       <div class="side">
+        <div class="insight" hidden></div>
         <div class="panel controls">
           <label for="${this.key}-level">Niveau de l'IA
             <select id="${this.key}-level">${LEVELS.map((l, i) => `<option value="${i}">${i + 1} · ${l.name}</option>`).join('')}</select>
@@ -1383,7 +1403,7 @@ class Arena {
           </div>
           <div class="row">
             <button class="btn" type="button" data-a="undo">↶ Reprendre</button>
-            ${this.coach ? '<button class="btn" type="button" data-a="hint">Indice</button>' : ''}
+            <button class="btn" type="button" data-a="hint">${this.coach ? 'Indice' : 'Meilleur coup'}</button>
             <button class="btn" type="button" data-a="flip" aria-label="Retourner l'échiquier">⇅</button>
             ${this.coach && Voice.available ? '<button class="btn" type="button" data-a="voice"></button>' : ''}
           </div>
@@ -1401,12 +1421,12 @@ class Arena {
           <p class="engine-note voice-tip"></p>
         </div>` : ''}
         ${this.coach ? '<div class="verdict-box"></div><div class="tally"></div>' : ''}
-        <div class="moves" aria-label="Coups joués"></div>
+        <div class="moves" aria-label="Coups joués : touche un coup pour l'analyser"></div>
         ${this.coach ? `<div class="legend">${Object.values(VERDICTS).map(v => `<span style="--c:${v.color}">${v.label}</span>`).join('')}</div>` : ''}
         <p class="engine-note"></p>
       </div>`;
     this.board = new Board(r.querySelector('.board-wrap'), {
-      interactive: () => !this.busy && !this.pending && !this.game.game_over() && this.game.turn() === this.userColor,
+      interactive: () => this.view == null && !this.busy && !this.pending && !this.game.game_over() && this.game.turn() === this.userColor,
       color: () => this.userColor,
       onMove: mv => this.userMove(mv)
     });
@@ -1416,7 +1436,19 @@ class Arena {
     r.querySelector('[data-a="new"]').onclick = () => this.newGame();
     r.querySelector('[data-a="undo"]').onclick = () => this.undo();
     r.querySelector('[data-a="flip"]').onclick = () => { this.board.flip(this.board.orientation === 'w' ? 'b' : 'w'); this.setEval(); };
-    const hb = r.querySelector('[data-a="hint"]'); if (hb) hb.onclick = () => this.hint();
+    const hb = r.querySelector('[data-a="hint"]'); if (hb) hb.onclick = () => this.hint(!this.coach);
+    // Navigation dans la partie : boutons, coups de la liste, flèches du clavier.
+    r.querySelectorAll('[data-n]').forEach(b => b.onclick = () => {
+      const n = this.game.history().length, cur = this.view == null ? n : this.view;
+      const to = { first: 0, prev: cur - 1, next: cur + 1, last: n }[b.dataset.n];
+      this.goto(to);
+    });
+    r.querySelector('.moves').onclick = e => { const b = e.target.closest('[data-ply]'); if (b) this.goto(+b.dataset.ply + 1); };
+    document.addEventListener('keydown', e => {
+      if (!this.root.offsetParent || /input|select|textarea/i.test(e.target.tagName)) return;
+      if (e.key === 'ArrowLeft') { e.preventDefault(); r.querySelector('[data-n="prev"]').click(); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); r.querySelector('[data-n="next"]').click(); }
+    });
     const vb = r.querySelector('[data-a="voice"]');
     if (vb) {
       const paint = () => { vb.setAttribute('aria-pressed', Voice.on); vb.textContent = Voice.on ? 'Voix : activée' : 'Voix : coupée'; };
@@ -1470,6 +1502,7 @@ class Arena {
   newGame() {
     if (this.coach) Voice.stop();
     this.gen++; this.game = new Chess(); this.cache = new Map(); this.marks = []; this.pending = null; this.busy = false; this.hintLevel = 0;
+    this.view = null; this.showInsight(false);
     this.tally = { best: 0, good: 0, inacc: 0, mist: 0, blun: 0 }; this.verdicts = [];
     this.root.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === this.userColor));
     this.board.orientation = this.userColor; this.board.arrowList = []; this.board.marks = [];
@@ -1495,7 +1528,8 @@ class Arena {
       const m = g.move({ from: res.best.slice(0, 2), to: res.best.slice(2, 4), promotion: res.best[4] || 'q' });
       this.busy = false; this.hintLevel = 0;
       this.board.arrowList = this.pendingArrows || []; this.pendingArrows = null; this.board.marks = [];
-      this.board.set(g, m); this.renderMoves();
+      if (this.view == null) this.board.set(g, m);
+      this.renderMoves();
       return this.turn();
     }
     this.status('À toi de jouer' + (g.in_check() ? ' : tu es en échec !' : '.'));
@@ -1511,7 +1545,7 @@ class Arena {
     else n.textContent = '';
   }
   async userMove(mv) {
-    if (this.pending) return;
+    if (this.pending || this.view != null) return;
     const g = this.game, gen = this.gen, before = g.fen();
     const m = g.move(mv); if (!m) return;
     this.board.arrowList = []; this.board.marks = [];
@@ -1578,7 +1612,7 @@ class Arena {
     if (this.game.in_checkmate()) speech = 'Échec et mat ! Bravo, tu as gagné.';
     Voice.say(speech);
     const r = box.querySelector('[data-v="retry"]'), c = box.querySelector('[data-v="go"]');
-    if (r) r.onclick = () => { this.pending = null; this.game.undo(); this.tally[kind]--; this.renderTally(); const hh = this.game.history({ verbose: true }); this.board.arrowList = []; this.board.set(this.game, hh[hh.length - 1]); this.renderMoves(); this.setVerdict('retry', `<div class="tag">À toi</div><p>Cherche un meilleur coup. Besoin d'aide ? Clique sur « Indice ».</p>`); this.turn(); };
+    if (r) r.onclick = () => { this.pending = null; this.game.undo(); this.verdicts.length = this.game.history().length; this.retally(); const hh = this.game.history({ verbose: true }); this.board.arrowList = []; this.board.set(this.game, hh[hh.length - 1]); this.renderMoves(); this.setVerdict('retry', `<div class="tag">À toi</div><p>Cherche un meilleur coup. Besoin d'aide ? Clique sur « Indice ».</p>`); this.turn(); };
     if (c) c.onclick = () => { this.pending = null; this.pendingArrows = []; box.querySelector('.row').remove(); this.turn(); };
     // flèches : ton coup (orange) et le meilleur coup (bleu)
     if (kind !== 'best' && bestEx && bestEx.move) {
@@ -1605,8 +1639,10 @@ class Arena {
     const t = this.root.querySelector('.tally'); if (!t) return;
     t.innerHTML = Object.entries(VERDICTS).map(([k, v]) => `<div style="--c:${v.color}"><b>${this.tally[k]}</b>${v.label.replace(' coup', '')}</div>`).join('');
   }
-  async hint() {
+  async hint(direct) {
+    if (this.view != null) this.goto(null);
     if (this.game.turn() !== this.userColor || this.busy || this.pending) return;
+    if (direct) this.hintLevel = 1;
     const gen = this.gen;
     this.status("L'entraîneur cherche…", true);
     const res = await this.analyse(this.game.fen());
@@ -1614,14 +1650,16 @@ class Arena {
     this.hintLevel++;
     const from = res.best.slice(0, 2), to = res.best.slice(2, 4), p = this.game.get(from);
     if (this.hintLevel === 1) { this.board.highlight([from]); this.status(`Indice : joue ${ART[p.type]} ${NAME[p.type]} en ${from}.`); Voice.say(`Indice : regarde ${ART[p.type]} ${NAME[p.type]} en ${from}.`); }
-    else { this.board.marks = [from]; this.board.arrows([[from, to]]); this.board.render(); const ex = explainMove(this.game.fen(), res.best); this.status(`Meilleur coup : ${fr(ex.san)}.`); Voice.say(`Le meilleur coup est ${sayMove(ex.san)}.`); }
+    else { this.board.marks = [from]; this.board.arrows([[from, to]]); this.board.render(); const ex = explainMove(this.game.fen(), res.best); this.status(`Meilleur coup : <span class="mono">${fr(ex.san)}</span>. ${ex.text}`); if (this.coach) Voice.say(`Le meilleur coup est ${sayMove(ex.san)}.`); }
   }
   undo() {
     if (this.busy) return;
+    if (this.view != null) this.goto(null);
     this.gen++; this.pending = null;
     const g = this.game;
     if (!g.history().length) return;
     g.undo(); if (g.turn() !== this.userColor) g.undo();
+    this.retally();
     const hh = g.history({ verbose: true });
     this.board.arrowList = []; this.board.marks = [];
     this.board.set(g, hh[hh.length - 1]); this.renderMoves();
@@ -1631,10 +1669,124 @@ class Arena {
   renderMoves() {
     const hist = this.game.history({ verbose: true }), box = this.root.querySelector('.moves');
     this.verdicts.length = Math.min(this.verdicts.length, hist.length);
-    const cell = j => { if (!hist[j]) return '<span></span>'; const v = this.verdicts[j]; return `<span class="mv">${fr(hist[j].san)}${v ? `<i style="background:${VERDICTS[v].color}" title="${VERDICTS[v].label}"></i>` : ''}</span>`; };
+    const at = this.view == null ? hist.length : this.view;
+    const cell = j => { if (!hist[j]) return '<span></span>'; const v = this.verdicts[j]; return `<button type="button" class="mv${j === at - 1 ? ' cur' : ''}" data-ply="${j}">${fr(hist[j].san)}${v ? `<i style="background:${VERDICTS[v].color}" title="${VERDICTS[v].label}"></i>` : ''}</button>`; };
     let html = '';
     for (let i = 0; i < hist.length; i += 2) html += `<span class="n">${i / 2 + 1}.</span>${cell(i)}${cell(i + 1)}`;
-    box.innerHTML = html; box.scrollTop = box.scrollHeight;
+    box.innerHTML = html;
+    const cur = box.querySelector('.cur');
+    if (this.view == null || !cur) box.scrollTop = box.scrollHeight; else cur.scrollIntoView({ block: 'nearest' });
+    this.paintNav();
+  }
+  retally() {
+    this.tally = { best: 0, good: 0, inacc: 0, mist: 0, blun: 0 };
+    this.verdicts.forEach(k => { if (k) this.tally[k]++; });
+    this.renderTally();
+  }
+  paintNav() {
+    const r = this.root, n = this.game.history().length, cur = this.view == null ? n : this.view;
+    const q = s => r.querySelector(`[data-n="${s}"]`);
+    if (!q('first')) return;
+    q('first').disabled = q('prev').disabled = cur <= 0;
+    q('next').disabled = q('last').disabled = cur >= n;
+    r.querySelector('.navpos').textContent = n ? (this.view == null ? `Coup ${Math.ceil(n / 2)} · en direct` : `Coup ${Math.ceil(cur / 2) || 0} / ${Math.ceil(n / 2)}`) : '';
+    r.querySelector('.leftcol').classList.toggle('reviewing', this.view != null);
+  }
+
+  /* ---------- Consultation d'une position passée ---------- */
+  positionsUpTo(k) {
+    const hist = this.game.history({ verbose: true }), g = new Chess();
+    const fens = [g.fen()];
+    for (let i = 0; i < k; i++) { g.move(hist[i].san); fens.push(g.fen()); }
+    return { g, hist, fens };
+  }
+  goto(k) {
+    const n = this.game.history().length;
+    if (k == null || k >= n) {
+      if (this.view == null) return;
+      this.view = null; this.showInsight(false);
+      const hh = this.game.history({ verbose: true });
+      this.board.arrowList = []; this.board.marks = [];
+      this.board.set(this.game, hh[hh.length - 1]);
+      if (this.coach && this.liveEval) this.setEval(this.liveEval);
+      this.renderMoves();
+      return;
+    }
+    k = Math.max(0, k);
+    if (this.view == null) this.liveEval = this.lastEval;
+    if (this.coach) Voice.stop();
+    this.view = k;
+    const { g, hist } = this.positionsUpTo(k);
+    this.board.arrowList = []; this.board.marks = [];
+    this.board.set(g, hist[k - 1]);
+    this.renderMoves();
+    this.explainPly(k);
+  }
+  showInsight(on, html) {
+    const box = this.root.querySelector('.insight'); if (!box) return;
+    box.hidden = !on;
+    const vb = this.root.querySelector('.verdict-box'); if (vb) vb.hidden = on;
+    if (on) box.innerHTML = html;
+  }
+  // Analyse du coup numéro k (la position affichée est celle d'après ce coup) : note, meilleur coup, conséquences.
+  async explainPly(k) {
+    const gen = this.gen, view = k;
+    const replay = `<div class="row"><button class="btn primary" type="button" data-i="replay">Rejouer à partir d'ici</button><button class="btn" type="button" data-i="live">Revenir à la partie</button></div>`;
+    const bind = () => {
+      const box = this.root.querySelector('.insight');
+      const rp = box.querySelector('[data-i="replay"]'), lv = box.querySelector('[data-i="live"]');
+      if (rp) rp.onclick = () => this.replayFrom(view);
+      if (lv) lv.onclick = () => this.goto(null);
+    };
+    if (k === 0) { this.showInsight(true, `<div class="verdict"><div class="tag">Position de départ</div><p>Avance avec ▶ pour revoir la partie coup par coup.</p>${replay}</div>`); bind(); return; }
+    const { hist, fens } = this.positionsUpTo(k);
+    const m = hist[k - 1], before = fens[k - 1], after = fens[k];
+    const mine = m.color === this.userColor, who = mine ? 'Tu as joué' : "L'IA a joué";
+    this.showInsight(true, `<div class="verdict"><div class="tag">${mine ? 'Ton coup' : "Coup de l'IA"} : <span class="mono">${fr(m.san)}</span></div><p class="thinking"><span class="spin"></span>Analyse du coup…</p>${replay}</div>`); bind();
+    const ga = new Chess(after);
+    const pre = await this.analyse(before);
+    let post = null, afterScore;
+    if (ga.in_checkmate()) afterScore = { mate: 1 };
+    else if (ga.game_over()) afterScore = { cp: 0 };
+    else { post = await this.analyse(after); afterScore = neg(post.score); }
+    if (gen !== this.gen || this.view !== view) return;
+    const loss = Math.max(0, winPct(cpOf(pre.score)) - winPct(cpOf(afterScore)));
+    const kind = classify(loss, pre.best === uciOf(m) || ga.in_checkmate());
+    if (mine && this.verdicts[k - 1] !== kind) { this.verdicts[k - 1] = kind; if (this.coach) this.retally(); this.renderMoves(); }
+    const v = VERDICTS[kind], me = explainMove(before, uciOf(m));
+    const sign = m.color === 'w' ? 1 : -1;
+    const white = s => s.mate != null ? { mate: s.mate * sign } : { cp: s.cp * sign };
+    let html = `<div class="tag">${v.label}</div><p>${who} <span class="mono">${fr(m.san)}</span> : ${me.text.charAt(0).toLowerCase() + me.text.slice(1)}</p>`;
+    const bestEx = pre.best && kind !== 'best' ? explainMove(before, pre.best) : null;
+    if (bestEx) {
+      html += `<p><b>Meilleur coup : <span class="mono">${fr(bestEx.san)}</span></b>, ${bestEx.text.charAt(0).toLowerCase() + bestEx.text.slice(1)}</p>`;
+      if (pre.pv && pre.pv.length > 1) html += `<p><small>Suite possible : <span class="mono">${fmtLine(before, pvToSan(before, pre.pv, 5))}</span></small></p>`;
+    } else html += `<p>C'était le meilleur coup de la position.</p>`;
+    // Conséquences : ce que l'adversaire peut faire ensuite et la suite la plus probable.
+    if (ga.in_checkmate()) html += `<p><b>Conséquence :</b> échec et mat, la partie est finie.</p>`;
+    else if (ga.game_over()) html += `<p><b>Conséquence :</b> la partie se termine par une nulle.</p>`;
+    else if (post && post.best) {
+      const reply = explainMove(after, post.best);
+      const mate = post.score.mate != null && post.score.mate > 0;
+      html += `<p><b>Conséquence :</b> ${mate ? `l'adversaire a un mat en ${post.score.mate}, qui commence par` : 'la meilleure réponse est'} <span class="mono">${fr(reply.san)}</span>, ${reply.text.charAt(0).toLowerCase() + reply.text.slice(1)}</p>`;
+      if (post.pv && post.pv.length > 1) html += `<p><small>Suite probable : <span class="mono">${fmtLine(after, pvToSan(after, post.pv, 5))}</span></small></p>`;
+    }
+    html += `<p><small>Évaluation (pour les Blancs) : <span class="mono">${fmtEval(white(pre.score))}</span> avant, <span class="mono">${fmtEval(white(afterScore))}</span> après ce coup.</small></p>`;
+    this.showInsight(true, `<div class="verdict ${kind}">${html}${replay}</div>`); bind();
+    if (bestEx && bestEx.move) this.board.arrows([[bestEx.move.from, bestEx.move.to]]);
+    if (this.coach) this.setEval(white(afterScore));
+  }
+  // Reprend la partie depuis la position consultée : les coups suivants sont effacés.
+  replayFrom(k) {
+    this.gen++; this.busy = false; this.pending = null; this.pendingArrows = null; this.hintLevel = 0;
+    const { g, hist } = this.positionsUpTo(k);
+    this.game = g; this.view = null; this.showInsight(false);
+    this.verdicts.length = k; this.retally();
+    this.board.arrowList = []; this.board.marks = [];
+    this.board.set(this.game, hist[k - 1]);
+    if (this.coach) { Voice.stop(); this.setVerdict('retry', `<div class="tag">À toi</div><p>La partie reprend à partir de cette position.</p>`); }
+    this.renderMoves();
+    this.turn();
   }
   finish() {
     const g = this.game; let txt;
