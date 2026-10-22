@@ -39,6 +39,13 @@ self.addEventListener('fetch', e => {
     return;
   }
   if (BIG.test(url.pathname)) { e.respondWith(fetch(req).then(isolate)); return; }
+  // Phrases pré-enregistrées et code de la voix : le réseau d'abord, sinon une mise à jour de l'app
+  // garderait l'ancienne liste de phrases jusqu'au lancement suivant.
+  if (/\/voix\/[^/]+\.(json|js|mjs)$|\/voix\/phrases\.pcm\.wasm$/.test(url.pathname)) {
+    e.respondWith(fetch(req).then(r => { if (r.ok) { const c = r.clone(); caches.open(CORE).then(x => x.put(req, c)); } return isolate(r); })
+      .catch(() => caches.match(req, { ignoreSearch: true }).then(isolate)));
+    return;
+  }
   // Le reste : depuis le cache, rafraîchi en arrière-plan.
   e.respondWith(caches.match(req, { ignoreSearch: true }).then(hit => {
     const net = fetch(req).then(r => {

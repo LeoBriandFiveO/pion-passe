@@ -37,8 +37,8 @@ const KokoroVoice = (() => {
 
   function loadFixed() {
     if (!fixedLoading) fixedLoading = Promise.all([
-      fetch(api.base + 'phrases.json').then(r => r.json()),
-      fetch(api.base + 'phrases.pcm.wasm').then(r => r.arrayBuffer()),
+      fetch(api.base + 'phrases.json', { cache: 'no-cache' }).then(r => r.json()),
+      fetch(api.base + 'phrases.pcm.wasm', { cache: 'no-cache' }).then(r => r.arrayBuffer()),
     ]).then(([index, buf]) => {
       const pcm = new Int16Array(buf);
       for (const [text, [o, n]] of Object.entries(index)) fixed.set(text, Float32Array.from(pcm.subarray(o, o + n), x => x / 32768));
