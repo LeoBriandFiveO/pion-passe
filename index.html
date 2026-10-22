@@ -241,6 +241,13 @@ select { font: inherit; padding: 7px 10px; border-radius: 8px; border: 1px solid
 .k-state.ok { color: var(--v-best); } .k-state.ko { color: var(--v-blun); }
 .k-bar { height: 6px; border-radius: 3px; background: var(--sunk); overflow: hidden; }
 .k-bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+.anecdote { position: relative; border-radius: 10px; padding: 14px 16px; background: color-mix(in srgb, var(--brass) 12%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brass) 35%, transparent); display: grid; gap: 6px; }
+.anecdote .anec-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.anecdote h4 { margin: 0; font-family: var(--font-display); font-size: 19px; line-height: 1.2; }
+.anecdote p { margin: 0; }
+.anecdote a { font-weight: 600; font-size: 14px; }
+.anec-x { border: 0; background: none; color: var(--muted); font-size: 20px; line-height: 1; padding: 2px 6px; border-radius: 6px; }
+.anec-x:hover { background: var(--sunk); color: var(--ink); }
 .tally { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; text-align: center; font-size: 12px; color: var(--muted); }
 .tally b { display: block; font: 700 20px/1.2 var(--font-mono); color: var(--c); }
 
@@ -425,7 +432,7 @@ section[data-view].enter { animation: enter .36s var(--ease-out) both; }
     <div class="sec-head">
       <span class="eyebrow">Mode entraîneur</span>
       <h2>Joue, l'entraîneur commente chaque coup</h2>
-      <p class="lead">Après chacun de tes coups, Stockfish compare ta décision au meilleur coup. Si tu t'es trompé, l'entraîneuse t'explique pourquoi, à voix haute si tu le souhaites, et tu peux reprendre ton coup.</p>
+      <p class="lead">Après chacun de tes coups, Stockfish compare ta décision au meilleur coup. Si tu t'es trompé, l'entraîneuse t'explique pourquoi, à voix haute si tu le souhaites, et tu peux reprendre ton coup. Au fil de la partie, elle te raconte aussi l'histoire des ouvertures et des coups célèbres que tu joues.</p>
     </div>
     <div class="arena" id="coach-arena"></div>
   </section>
@@ -794,6 +801,84 @@ const LEVELS = [
   { name: 'Expert', skill: 17, depth: 13, time: 1000 },
   { name: 'Maître', skill: 20, depth: 16, time: 1500 }
 ];
+
+/* Anecdotes racontées par l'entraîneuse quand un coup ou une ouverture y fait écho.
+   line : suite exacte de coups depuis le début ; event : situation détectée pendant la partie.
+   say : version parlée, courte (phrases fixes, pré-enregistrables pour la voix naturelle). */
+const ANECDOTES = [
+  { id: 'e4', line: ['e4'], year: '1969', title: "« Le meilleur, à l'épreuve des faits »",
+    text: "Bobby Fischer, champion du monde 1972, jouait presque toujours 1.e4. Dans son livre <i>Mes 60 meilleures parties</i>, il le qualifie de coup « best by test » : le meilleur, à l'épreuve des faits.",
+    say: "Bobby Fischer jouait presque toujours e4. Pour lui, c'était le meilleur premier coup, prouvé par l'expérience." },
+  { id: 'scandinave', line: ['e4', 'd5'], year: '1475', title: "La plus vieille partie connue",
+    text: "La plus ancienne partie connue jouée avec la dame moderne, Castellví contre Vinyoles, à Valence vers 1475, commence justement par 1.e4 d5 : la défense scandinave.",
+    say: "La plus vieille partie connue avec la dame moderne, jouée à Valence vers 1475, commençait exactement comme ça." },
+  { id: 'sicilienne', line: ['e4', 'c5'], year: 'XVIe s.', title: "La Sicilienne, arme des champions",
+    text: "Déjà étudiée par les maîtres italiens de la Renaissance, la Sicilienne est devenue la réponse la plus jouée à 1.e4 au plus haut niveau. Fischer et Kasparov en ont fait leur arme favorite.",
+    say: "La Sicilienne était déjà étudiée par les Italiens de la Renaissance. Fischer et Kasparov en ont fait leur arme favorite." },
+  { id: 'francaise', line: ['e4', 'e6'], year: '1834', title: "Pourquoi « française » ?",
+    text: "Cette défense doit son nom à un match par correspondance entre Londres et Paris, commencé en 1834 : l'équipe parisienne l'avait jouée et gagné la partie.",
+    say: "La défense française doit son nom à un match par correspondance entre Londres et Paris, en 1834. Les Parisiens l'avaient jouée, et ils avaient gagné." },
+  { id: 'caro-kann', line: ['e4', 'c6'], year: '1886', title: "Deux noms pour une défense",
+    text: "La Caro-Kann porte les noms de l'Anglais Horatio Caro et de l'Autrichien Marcus Kann, qui l'ont analysée ensemble en 1886.",
+    say: "La Caro-Kann porte les noms de deux joueurs, l'Anglais Horatio Caro et l'Autrichien Marcus Kann, qui l'ont analysée en 1886." },
+  { id: 'petrov', line: ['e4', 'e5', 'Nf3', 'Nf6'], year: 'XIXe s.', title: "La défense Petrov",
+    text: "Elle porte le nom d'Alexandre Petrov, le premier grand joueur russe, qui l'a étudiée au XIXe siècle. Elle a la réputation d'être l'une des défenses les plus solides.",
+    say: "Cette défense porte le nom d'Alexandre Petrov, le premier grand joueur russe, au dix-neuvième siècle." },
+  { id: 'roi-gambit', line: ['e4', 'e5', 'f4'], year: '1851', title: "Le gambit du roi et l'Immortelle",
+    text: "Le gambit du roi était l'ouverture préférée des romantiques. L'« Immortelle », jouée par Adolf Anderssen à Londres en 1851, commence ainsi : il y sacrifie ensuite ses deux tours et sa dame pour mater.",
+    say: "Le gambit du roi était l'ouverture des romantiques. La partie Immortelle d'Anderssen, en 1851, commence ainsi." },
+  { id: 'ecossaise', line: ['e4', 'e5', 'Nf3', 'Nc6', 'd4'], year: '1824', title: "Une ouverture écossaise",
+    text: "Son nom vient d'un match par correspondance entre Édimbourg et Londres, commencé en 1824 : les Écossais l'avaient choisie.",
+    say: "Son nom vient d'un match par correspondance entre Édimbourg et Londres, en 1824." },
+  { id: 'espagnole', line: ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5'], year: '1561', title: "Un prêtre espagnol",
+    text: "La partie espagnole porte le nom de Ruy López de Segura, prêtre espagnol qui l'a analysée dans son livre de 1561. On l'appelle encore « Ruy Lopez » dans les pays anglophones.",
+    say: "Cette ouverture porte le nom de Ruy López, un prêtre espagnol qui l'a analysée dans un livre de 1561." },
+  { id: 'italienne', line: ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4'], year: 'vers 1620', title: "L'une des plus vieilles ouvertures",
+    text: "La partie italienne figure déjà dans des manuscrits de la fin du XVe siècle. Le Calabrais Gioachino Greco l'a rendue célèbre au XVIIe siècle avec des pièges que l'on tend encore aujourd'hui.",
+    say: "La partie italienne est l'une des plus vieilles ouvertures. Gioachino Greco l'a rendue célèbre au dix-septième siècle." },
+  { id: 'evans', line: ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Bc5', 'b4'], year: 'vers 1827', title: "Le gambit d'un capitaine",
+    text: "Le gambit Evans a été inventé vers 1827 par William Evans, capitaine de navire gallois. On raconte qu'il l'aurait imaginé pendant ses voyages en mer.",
+    say: "Ce gambit a été inventé vers 1827 par William Evans, un capitaine de navire gallois." },
+  { id: 'gambit-dame', line: ['d4', 'd5', 'c4'], year: '2020', title: "Le Jeu de la dame",
+    text: "Le gambit dame figure déjà dans un manuscrit de la fin du XVe siècle. En anglais, il se dit <i>The Queen's Gambit</i> : c'est le titre original de la série <i>Le Jeu de la dame</i>, qui a attiré des millions de nouveaux joueurs en 2020.",
+    say: "En anglais, le gambit dame se dit The Queen's Gambit. C'est le titre original de la série Le Jeu de la dame." },
+  { id: 'londres', line: ['d4', 'd5', 'Bf4'], year: '1922', title: "Pourquoi « Londres » ?",
+    text: "Le système de Londres doit son nom au grand tournoi de Londres de 1922, remporté par Capablanca, où il a été joué plusieurs fois.",
+    say: "Le système de Londres doit son nom au tournoi de Londres de 1922, gagné par Capablanca." },
+  { id: 'londres2', line: ['d4', 'Nf6', 'Bf4'], same: 'londres' },
+  { id: 'est-indienne', line: ['d4', 'Nf6', 'c4', 'g6'], year: 'XXe s.', title: "L'Est-indienne",
+    text: "Longtemps jugée douteuse, cette défense est devenue l'arme de combat de Fischer et de Kasparov : les Noirs laissent le centre aux Blancs pour mieux l'attaquer ensuite.",
+    say: "Cette défense était l'arme de combat de Fischer et de Kasparov." },
+
+  { id: 'roque', event: 'castle', year: 'XVIe s.', title: "L'histoire du roque",
+    text: "Le roque tel qu'on le connaît s'est imposé en Europe vers le XVIe siècle. En Italie, on a longtemps joué un « roque libre » où le roi et la tour pouvaient se placer presque où l'on voulait, jusqu'à la fin du XIXe siècle.",
+    say: "Le roque moderne s'est imposé vers le seizième siècle. En Italie, on a joué un roque libre jusqu'à la fin du dix-neuvième." },
+  { id: 'passant', event: 'ep', year: '1880', title: "Une règle italienne tardive",
+    text: "La prise en passant est apparue avec le double pas du pion, à la Renaissance. Les Italiens ne l'ont adoptée qu'en 1880 !",
+    say: "La prise en passant est née à la Renaissance, mais les Italiens ne l'ont adoptée qu'en 1880." },
+  { id: 'promotion', event: 'promo', year: 'Moyen Âge', title: "Une promotion modeste",
+    text: "Au Moyen Âge, un pion promu ne devenait qu'un « fers », l'ancêtre faible de la dame, qui n'avançait que d'une case en diagonale. Depuis la fin du XVe siècle, la promotion en dame peut décider d'une partie.",
+    say: "Au Moyen Âge, un pion promu devenait une pièce très faible, qui n'avançait que d'une case en diagonale." },
+  { id: 'sacrifice', event: 'sacrifice', year: '1858', title: "L'art du sacrifice",
+    text: "Donner du matériel pour attaquer, c'est l'esprit de Paul Morphy. Dans la partie de l'Opéra, à Paris en 1858, il sacrifie sa dame pour mater au coup suivant. Revois-la sur la page d'accueil.",
+    say: "Donner du matériel pour attaquer, c'est l'esprit de Paul Morphy. À l'Opéra de Paris, en 1858, il a sacrifié sa dame pour mater." },
+  { id: 'gaffe1', event: 'gaffe', year: '2006', title: "Même les champions gaffent",
+    text: "En 2006, le champion du monde Vladimir Kramnik a laissé un mat en un coup à l'ordinateur Deep Fritz. Une gaffe, ça arrive à tout le monde : l'important est de comprendre pourquoi.",
+    say: "Rassure-toi, en 2006, le champion du monde Vladimir Kramnik a laissé un mat en un coup à l'ordinateur Deep Fritz." },
+  { id: 'gaffe2', event: 'gaffe', year: '1892', title: "La gaffe la plus chère",
+    text: "En 1892, lors de la dernière partie de son match pour le titre mondial contre Steinitz, Mikhaïl Tchigorine joue un coup qui permet un mat en deux. Il perd le match sur cette gaffe.",
+    say: "En 1892, Tchigorine a perdu le championnat du monde sur une gaffe qui permettait un mat en deux coups." },
+  { id: 'etouffe', event: 'smothered', year: '1497', title: "Le mat étouffé",
+    text: "Ce mat où le roi est enfermé par ses propres pièces est décrit dès 1497 par l'Espagnol Lucena, dans l'un des premiers livres d'échecs imprimés.",
+    say: "Ce mat étouffé est déjà décrit en 1497, dans l'un des premiers livres d'échecs imprimés." },
+  { id: 'mat', event: 'mate', year: 'VIIe s.', title: "D'où vient « échec et mat » ?",
+    text: "L'expression vient du persan <i>shâh mât</i>, passée par l'arabe : le roi est pris au piège, il ne peut plus s'échapper.",
+    say: "Échec et mat vient du persan shâh mât. Le roi est pris au piège." },
+  { id: 'longue', event: 'move40', year: '1989', title: "La plus longue partie",
+    text: "La plus longue partie de tournoi, Nikolić contre Arsović à Belgrade en 1989, a duré 269 coups et plus de vingt heures. Elle s'est terminée par une nulle.",
+    say: "La plus longue partie de tournoi a duré 269 coups et plus de vingt heures, à Belgrade, en 1989." }
+];
+ANECDOTES.forEach(a => { if (a.same) Object.assign(a, { ...ANECDOTES.find(b => b.id === a.same), id: a.id, line: a.line }); });
 
 /* ====================== Utilitaires ====================== */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1307,16 +1392,29 @@ const Voice = {
   isNatural(v) { return !!v && this.natTest(v); },
   /* La voix naturelle Kokoro (voix/kokoro-voice.js), si elle est activée, passe avant la voix du navigateur. */
   kokoro() { return typeof KokoroVoice !== 'undefined' && KokoroVoice.supported ? KokoroVoice : null; },
+  tail: Promise.resolve(), turn: 0,
   say(text) {
     if (!this.on || !text) return;
+    this.turn++;
     const K = this.kokoro();
-    if (K && K.status !== 'off') { K.fallback = t => this.sayNative(t); return K.say(text); }
+    if (K && K.status !== 'off') { K.fallback = t => this.sayNative(t); this.tail = Promise.resolve(K.say(text)).catch(() => {}); return this.tail; }
+    this.tail = Promise.resolve();
     return this.sayNative(text);
   },
-  sayNative(text) {
+  /* Dit le texte à la suite de ce qui est en cours (sans le couper) ; abandonné si une nouvelle phrase a été lancée entre-temps. */
+  sayAfter(text) {
+    if (!this.on || !text) return;
+    const K = this.kokoro(), my = this.turn;
+    if (K && K.status !== 'off') {
+      this.tail = this.tail.then(() => { if (my !== this.turn) return; return K.status === 'ready' ? K.say(text) : this.sayNative(text, true); }).catch(() => {});
+      return this.tail;
+    }
+    return this.sayNative(text, true);
+  },
+  sayNative(text, queue) {
     if (!this.on || !this.supported || !text) return;
     try {
-      speechSynthesis.cancel();
+      if (!queue) speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' '));
       const v = this.voice || this.pick();
       if (v) u.voice = v;
@@ -1327,7 +1425,7 @@ const Voice = {
       speechSynthesis.speak(u);
     } catch (e) {}
   },
-  stop() { try { this.supported && speechSynthesis.cancel(); } catch (e) {} const K = this.kokoro(); if (K) K.stop(); },
+  stop() { this.turn++; try { this.supported && speechSynthesis.cancel(); } catch (e) {} const K = this.kokoro(); if (K) K.stop(); },
   /* Synthétise à l'avance une phrase probable (voix naturelle seulement, qui est lente à calculer). */
   prepare(text) { const K = this.kokoro(); if (this.on && K && K.status === 'ready') K.prepare(text); },
   toggle() { this.on = !this.on; store.set('voice', this.on); if (!this.on) this.stop(); else this.say("Je suis ton entraîneuse. Je commenterai chacun de tes coups."); }
@@ -1420,7 +1518,7 @@ class Arena {
           <div class="row"><button class="btn" type="button" data-a="test">Écouter</button><span class="voice-tag"></span></div>
           <p class="engine-note voice-tip"></p>
         </div>` : ''}
-        ${this.coach ? '<div class="verdict-box"></div><div class="tally"></div>' : ''}
+        ${this.coach ? '<div class="verdict-box"></div><div class="anecdote" hidden></div><div class="tally"></div>' : ''}
         <div class="moves" aria-label="Coups joués : touche un coup pour l'analyser"></div>
         ${this.coach ? `<div class="legend">${Object.values(VERDICTS).map(v => `<span style="--c:${v.color}">${v.label}</span>`).join('')}</div>` : ''}
         <p class="engine-note"></p>
@@ -1503,6 +1601,7 @@ class Arena {
     if (this.coach) Voice.stop();
     this.gen++; this.game = new Chess(); this.cache = new Map(); this.marks = []; this.pending = null; this.busy = false; this.hintLevel = 0;
     this.view = null; this.showInsight(false);
+    this.told = new Set(); this.lastTold = -9; const an = this.root.querySelector('.anecdote'); if (an) an.hidden = true;
     this.tally = { best: 0, good: 0, inacc: 0, mist: 0, blun: 0 }; this.verdicts = [];
     this.root.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === this.userColor));
     this.board.orientation = this.userColor; this.board.arrowList = []; this.board.marks = [];
@@ -1530,6 +1629,7 @@ class Arena {
       this.board.arrowList = this.pendingArrows || []; this.pendingArrows = null; this.board.marks = [];
       if (this.view == null) this.board.set(g, m);
       this.renderMoves();
+      this.tellAnecdote(m, {});
       return this.turn();
     }
     this.status('À toi de jouer' + (g.in_check() ? ' : tu es en échec !' : '.'));
@@ -1570,10 +1670,57 @@ class Arena {
     const whiteEval = s => s.mate != null ? { mate: s.mate * sign } : { cp: s.cp * sign };
     this.setEval(whiteEval(afterScore));
     this.showVerdict(kind, { before, m, pre, post, bestScore: pre.score, afterScore, whiteEval });
+    this.tellAnecdote(m, { kind, post });
     if (kind === 'best' || kind === 'good' || g.game_over()) { this.pendingArrows = []; return this.turn(); }
     this.pending = true;
     this.status('Reprends ton coup ou continue la partie.');
     this.board.render();
+  }
+  /* ---------- Anecdotes historiques ---------- */
+  findAnecdote(m, ctx) {
+    if (typeof ANECDOTES === 'undefined') return null;
+    const g = this.game, hist = g.history().map(x => x.replace(/[+#]/g, '')), mine = m.color === this.userColor;
+    const fresh = a => !this.told.has(a.same || a.id);
+    const byLine = ANECDOTES.find(a => a.line && fresh(a) && a.line.length === hist.length && a.line.every((x, i) => x === hist[i]));
+    if (byLine) return byLine;
+    const ev = e => ANECDOTES.find(a => a.event === e && fresh(a));
+    if (mine) {
+      if (g.in_checkmate()) {
+        if (m.piece === 'n' && this.smothered()) return ev('smothered') || ev('mate');
+        return ev('mate');
+      }
+      if (ctx.kind === 'blun') return ev('gaffe');
+      if (m.flags.includes('k') || m.flags.includes('q')) return ev('castle');
+      if (m.flags.includes('e')) return ev('ep');
+      if (m.flags.includes('p')) return ev('promo');
+      // Sacrifice : bon coup, mais la meilleure réponse adverse prend la pièce qui vient de jouer.
+      if ((ctx.kind === 'best' || ctx.kind === 'good') && ctx.post && ctx.post.best && ctx.post.best.slice(2, 4) === m.to
+        && VALUE[m.piece] >= 3 && VALUE[m.piece] > (m.captured ? VALUE[m.captured] : 0)) return ev('sacrifice');
+    }
+    if (hist.length >= 79) return ev('move40');
+    return null;
+  }
+  smothered() {
+    const g = this.game, ks = this.board.kingSquare(g.turn()), f = FILES.indexOf(ks[0]), r = +ks[1];
+    for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) {
+      if (!df && !dr) continue;
+      const ff = f + df, rr = r + dr; if (ff < 0 || ff > 7 || rr < 1 || rr > 8) continue;
+      const p = g.get(FILES[ff] + rr); if (!p || p.color !== g.turn()) return false;
+    }
+    return true;
+  }
+  tellAnecdote(m, ctx) {
+    const box = this.root.querySelector('.anecdote'); if (!box || !this.coach) return;
+    const a = this.findAnecdote(m, ctx);
+    if (!a) return;
+    const ply = this.game.history().length;
+    // Pas plus d'une anecdote tous les trois demi-coups, sauf pour une ouverture qu'on vient de reconnaître.
+    if (!a.line && ply - this.lastTold < 3) return;
+    this.told.add(a.same || a.id); this.lastTold = ply;
+    box.innerHTML = `<div class="anec-head"><span class="eyebrow">Le saviez-vous ? · ${a.year}</span><button type="button" class="anec-x" aria-label="Fermer l'anecdote">×</button></div><h4>${a.title}</h4><p>${a.text}</p><a href="#histoire">Voir la frise de l'histoire →</a>`;
+    box.hidden = false;
+    box.querySelector('.anec-x').onclick = () => { box.hidden = true; };
+    Voice.sayAfter('Le saviez-vous ? ' + a.say);
   }
   showVerdict(kind, d) {
     const v = VERDICTS[kind], box = this.root.querySelector('.verdict-box');
