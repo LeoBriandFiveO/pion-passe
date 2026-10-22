@@ -1228,18 +1228,20 @@ const Voice = {
   FEMALE: /(am[ée]lie|audrey|aur[ée]lie|marie|julie|c[ée]line|denise|hortense|virginie|[ée]lo[iï]se|vivienne|brigitte|charlotte|chantal|sylvie|sandrine|caroline|claire|l[ée]a|juliette|female|femme|google fran)/i,
   MALE: /(thomas|paul|henri|nicolas|daniel|claude|jacques|antoine|guillaume|mathieu|olivier|fabrice|jean|male|homme)/i,
   /* Les voix « neuronales » (Natural, Online, Premium, Enhanced, Google) sonnent beaucoup moins robotiques : on les place en tête. */
-  NATURAL: /(natural|neural|online|premium|enhanced|am[ée]lior|google)/i,
-  score(v) { return (this.NATURAL.test(v.name) ? 10 : 0) + (this.FEMALE.test(v.name) ? 4 : 0) - (this.MALE.test(v.name.replace(/female/i, '')) ? 5 : 0) + (/fr[-_]FR/i.test(v.lang) ? 1 : 0); },
+  // Sur iPhone et Mac, la voix téléchargée garde souvent le même nom (« Audrey ») : la qualité se lit dans voiceURI.
+  NATURAL: /(natural|neural|online|premium|enhanced|am[ée]lior|qualit|sup[ée]rieure|google)/i,
+  natTest(v) { return this.NATURAL.test(v.name + ' ' + (v.voiceURI || '')); },
+  score(v) { return (this.natTest(v) ? 10 : 0) + (/premium/i.test(v.voiceURI || v.name) ? 2 : 0) + (this.FEMALE.test(v.name) ? 4 : 0) - (this.MALE.test(v.name.replace(/female/i, '')) ? 5 : 0) + (/fr[-_]FR/i.test(v.lang) ? 1 : 0); },
   list() { if (!this.supported) return []; return speechSynthesis.getVoices().filter(v => /^fr/i.test(v.lang)).sort((a, b) => this.score(b) - this.score(a)); },
   pick() {
     const all = this.list(), chosen = store.get('voiceName', null);
-    this.voice = all.find(v => v.name === chosen) || all[0] || null;
+    this.voice = all.find(v => (v.voiceURI || v.name) === chosen) || all[0] || null;
     this.listeners.forEach(f => f());
     return this.voice;
   },
   listeners: [],
-  choose(name) { store.set('voiceName', name); this.voice = this.list().find(v => v.name === name) || null; },
-  isNatural(v) { return !!v && this.NATURAL.test(v.name); },
+  choose(id) { store.set('voiceName', id); this.voice = this.list().find(v => (v.voiceURI || v.name) === id) || null; },
+  isNatural(v) { return !!v && this.natTest(v); },
   /* La voix naturelle Kokoro (voix/kokoro-voice.js), si elle est activée, passe avant la voix du navigateur. */
   kokoro() { return typeof KokoroVoice !== 'undefined' && KokoroVoice.supported ? KokoroVoice : null; },
   say(text) {
@@ -1370,8 +1372,8 @@ class Arena {
       box.hidden = !Voice.on;
       const fill = () => {
         const all = Voice.list();
-        vs.innerHTML = all.length ? all.map(v => `<option value="${v.name.replace(/"/g, '&quot;')}">${v.name.replace(/</g, '&lt;')}${Voice.isNatural(v) ? ' · naturelle' : ''}</option>`).join('') : '<option>Voix française par défaut</option>';
-        if (Voice.voice) vs.value = Voice.voice.name;
+        vs.innerHTML = all.length ? all.map(v => `<option value="${(v.voiceURI || v.name).replace(/"/g, '&quot;')}">${v.name.replace(/</g, '&lt;')}${Voice.isNatural(v) ? ' · qualité supérieure' : ''}</option>`).join('') : '<option>Voix française par défaut</option>';
+        if (Voice.voice) vs.value = Voice.voice.voiceURI || Voice.voice.name;
         const nat = Voice.isNatural(Voice.voice);
         r.querySelector('.voice-tag').textContent = nat ? 'Voix naturelle' : '';
         r.querySelector('.voice-tip').innerHTML = nat ? '' : (Voice.kokoro() ? "Le plus simple : active la voix naturelle ci-dessus. " : '') + "Aucune voix « naturelle » trouvée sur cet appareil. Pour une voix bien plus humaine : sur <b>iPhone/Mac</b>, télécharge « Amélie (Premium) » ou « Audrey (Améliorée) » dans Réglages › Accessibilité › Contenu énoncé › Voix › Français ; sur <b>PC ou Android</b>, ouvre le site dans <b>Microsoft Edge</b> et choisis « Denise Online (Natural) » ou « Vivienne Online (Natural) ».";
